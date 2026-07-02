@@ -157,21 +157,12 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
                     "next_slot": result.get("next_slot"),
                 }
 
-                # Stage ① complete → fire stages ②+③ in background
+                # Stage ① ready → tell user they can confirm
                 if result["stage_complete"] and result.get("requirement_card"):
-                    response["stage_transition"] = {
-                        "from": ProjectStage.IDEA,
-                        "to": "thinking",
-                        "pending": True,
-                    }
+                    response["stage_ready"] = True
+                    response["requirement_card"] = result["requirement_card"]
                     await websocket.send_json(response)
-
-                    # Run thinking + structure in background
-                    import asyncio as aio
-                    aio.create_task(_run_pipeline_and_notify(
-                        websocket, project_id, result["requirement_card"]
-                    ))
-                    break  # Exit chat loop; pipeline will send final message
+                    continue  # Keep chat loop open; user confirms manually
 
                 await websocket.send_json(response)
 

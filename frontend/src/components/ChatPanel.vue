@@ -7,7 +7,15 @@
     </div>
 
     <div class="chat-messages" ref="messagesContainer">
-      <div v-if="conversationStore.messages.length === 0" class="empty-chat">
+      <!-- Stage ready confirmation bar -->
+      <div v-if="stageReady" class="stage-ready-bar">
+        <span>✅ 需求信息已充足</span>
+        <el-button type="primary" size="small" :loading="confirming" @click="handleConfirm">
+          完成需求梳理，生成产品方案
+        </el-button>
+      </div>
+
+      <div v-if="conversationStore.messages.length === 0 && !stageReady" class="empty-chat">
         <p>描述你的产品想法，AI 会引导你完善需求。</p>
       </div>
 
@@ -24,9 +32,6 @@
           <div v-if="msg.type === 'progress'" class="progress-notice">
             <el-icon class="is-loading"><Loading /></el-icon>
             {{ msg.content }}
-          </div>
-          <div v-if="msg.stage_complete" class="stage-complete-notice">
-            ✅ 需求已充足，正在生成产品方案...
           </div>
         </div>
       </div>
@@ -64,6 +69,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useConversationStore } from '@/stores/conversation'
+import { apiClient } from '@/api/client'
 import type { Project } from '@/types'
 
 const props = defineProps<{
@@ -72,12 +78,14 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'stage-transition': [data: { stage: string; thinkingReport?: string }]
+  'stage-transition': [data: { stage: string; thinkingReport?: string; structure?: any }]
 }>()
 
 const conversationStore = useConversationStore()
 const inputText = ref('')
 const typing = ref(false)
+const stageReady = ref(false)
+const confirming = ref(false)
 const messagesContainer = ref<HTMLElement>()
 
 onMounted(async () => {
@@ -100,8 +108,15 @@ watch(
     const lastMsg = msgs[msgs.length - 1]
     if (!lastMsg) return
 
-    // Handle stage_transition (from background pipeline completion)
+    // Handle stage_ready: show confirm button instead of auto-transition
+    if (lastMsg.stage_ready && lastMsg.requirement_card) {
+      stageReady.value = true
+      return
+    }
+
+    // Handle stage_transition (from manual advance API)
     if (lastMsg.type === 'stage_transition' && lastMsg.stage && lastMsg.thinking_report) {
+      stageReady.value = false
       emit('stage-transition', {
         stage: lastMsg.stage,
         thinkingReport: lastMsg.thinking_report,
@@ -110,14 +125,9 @@ watch(
       return
     }
 
-    // Handle pending transition (stage complete, pipeline running)
-    if (lastMsg.stage_transition?.pending) {
-      // Show progress, wait for stage_transition message
-      return
-    }
-
     // Legacy: direct stage_transition in message
     if (lastMsg.stage_transition?.to && props.project?.stage === 'idea') {
+      stageReady.value = false
       emit('stage-transition', {
         stage: lastMsg.stage_transition.to,
         thinkingReport: lastMsg.thinking_report,
@@ -126,7 +136,7 @@ watch(
     }
 
     if (lastMsg.stage_complete && !lastMsg.stage_transition?.pending) {
-      emit('stage-transition', { stage: 'thinking' })
+      stageReady.value = true
     }
   },
   { deep: true }
@@ -140,6 +150,23 @@ function handleSend() {
   inputText.value = ''
   typing.value = true
   setTimeout(() => { typing.value = false }, 2000)
+}
+
+async function handleConfirm() {
+  confirming.value = true
+  try {
+    // Use pipeline advance to trigger thinking stage
+    const result = await apiClient.post(`/api/pipeline/advance/${props.projectId}`, {})
+    stageReady.value = false
+    emit('stage-transition', {
+      stage: result.new_stage || 'thinking',
+      thinkingReport: result.thinking_report,
+      structure: result.structure,
+    })
+  } catch (e: any) {
+    confirming.value = false
+    // Could show error but keep the button visible for retry
+  }
 }
 
 function scrollToBottom() {
@@ -187,6 +214,19 @@ function scrollToBottom() {
   color: #c0c4cc;
   text-align: center;
   padding: 24px;
+}
+
+.stage-ready-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #16a34a;
 }
 
 .message {

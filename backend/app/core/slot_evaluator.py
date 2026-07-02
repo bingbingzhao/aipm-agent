@@ -11,32 +11,32 @@ from typing import Optional
 from app.core.llm import llm_chat
 from app.core.slots import SlotManager, SlotState
 
-EVAL_SYSTEM_PROMPT = """你是产品需求分析专家。快速判断需求维度的收集进度。
+EVAL_SYSTEM_PROMPT = """你是产品需求分析专家。判断需求维度的收集进度，标准从严。
 
-## 判断标准（宽松，够用即饱和）
+## 判断标准
 
-- **saturated**：信息足够支撑产品设计。阈值极低：
-  - product_type：只要提到品类（SaaS/工具/App）→ saturated
-  - target_user：只要提到目标人群（程序员/企业/学生）→ saturated  
-  - core_problem：只要描述了痛点（效率低/太贵/不好用）→ saturated
-  - existing_solutions：哪怕说"没有好方案"也→ saturated
-  - unique_value/monetization：只要提过一嘴→ saturated
-  - technical_constraints/regulatory：无特殊要求→ saturated（直接标，不用等用户提）
-- **partial**：只有极含糊时（"做给所有人"），且前4个关键维度不要给 partial
-- **empty**：完全没讨论，且仅用于后4个维度
+- **saturated**：信息具体、可支撑产品设计决策：
+  - product_type：明确了品类 + 关键功能方向（如"AI周报生成工具"，不是"提高效率的工具"）
+  - target_user：明确了具体人群 + 使用场景（如"中小团队的产品经理写周报时"，不是"职场人"）
+  - core_problem：描述了具体痛点和后果（如"每周花2小时回忆工作，常漏掉关键点"）
+  - existing_solutions：提到了具体方案和局限性（如"用Notion模板，但不自动拉数据"）
+- **partial**：信息方向对但不够具体（如只说了"程序员"但没说具体场景）
+- **empty**：完全没讨论
+
+## 注意
+- 前4个维度必须达到 saturated 标准才给 saturated
+- unique_value/monetization 只要提过一嘴即可 saturated
+- technical_constraints/regulatory_concerns 若无特殊提到则直接标 saturated
 
 ## 维度
-
 1. product_type 2. target_user 3. core_problem 4. existing_solutions
 5. unique_value 6. monetization 7. technical_constraints 8. regulatory_concerns
 
 ## 输出 JSON
-
-{"product_type":{"state":"saturated|partial|empty","summary":"20字总结"},..."overall_ready":true/false}
+{"product_type":{"state":"saturated|partial|empty","summary":"30字总结"},..."overall_ready":true/false}
 
 **overall_ready = 前4个维度都是 saturated**
-**第7、8维度（技术约束/合规）无特殊要求时直接标 saturated**
-只输出 JSON，不要其他文字。"""
+只输出 JSON。"""
 
 
 class SlotEvaluator:

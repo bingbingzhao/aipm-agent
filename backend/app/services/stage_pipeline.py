@@ -100,17 +100,13 @@ async def advance_to_thinking(
         project.requirement_card = requirement_card
         await db.commit()
 
-    # Generate thinking report
+    # Generate thinking report and stop — user confirms next stage manually
     report = await _thinking.analyze(requirement_card)
     await save_stage_output(project_id, "thinking", {"report": report})
 
-    # Auto-advance to structure
-    structure_result = await advance_to_structure(project_id, report, requirement_card)
-
     return {
-        "new_stage": structure_result.get("new_stage", ProjectStage.STRUCTURE),
+        "new_stage": ProjectStage.THINKING,
         "thinking_report": report,
-        "structure": structure_result.get("structure"),
     }
 
 
