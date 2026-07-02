@@ -109,9 +109,9 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
                 await websocket.close()
                 return
 
-            # Send welcome if first message (only initial_idea in history, no DB msgs)
+            # Send welcome if first message
             if len(engine.conversation_history) <= 1:
-                welcome = "你好！我是 AIPM Agent。请告诉我你的产品想法，我来帮你逐步梳理。"
+                welcome = "嗨！说说你想做什么产品？我可以帮你理清思路。"
                 await websocket.send_json({
                     "type": "message",
                     "role": "assistant",
@@ -157,18 +157,21 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
                     "next_slot": result.get("next_slot"),
                 }
 
-                # Stage ① complete → auto advance to Stage ② + ③
+                # Stage ① complete → fire stages ②+③ in background
                 if result["stage_complete"] and result.get("requirement_card"):
-                    pipeline_result = await advance_to_thinking(
-                        project_id,
-                        result["requirement_card"],
-                    )
                     response["stage_transition"] = {
                         "from": ProjectStage.IDEA,
-                        "to": pipeline_result.get("new_stage", ProjectStage.STRUCTURE),
+                        "to": "thinking",
+                        "pending": True,
                     }
-                    response["thinking_report"] = pipeline_result.get("thinking_report")
-                    response["structure"] = pipeline_result.get("structure")
+                    await websocket.send_json(response)
+
+                    # Run thinking + structure in background
+                    import asyncio as aio
+                    aio.create_task(_run_pipeline_and_notify(
+                        websocket, project_id, result["requirement_card"]
+                    ))
+                    break  # Exit chat loop; pipeline will send final message
 
                 await websocket.send_json(response)
 
@@ -185,3 +188,37 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
             pass
     finally:
         remove_engine(project_id)
+
+
+async def _run_pipeline_and_notify(websocket, project_id: str, requirement_card: dict):
+    """Background task: run thinking+structure pipeline, send results via WS."""
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        # Send progress update
+        await websocket.send_json({
+            "type": "progress",
+            "stage": "thinking",
+            "content": "正在分析产品思路...",
+        })
+
+        pipeline_result = await advance_to_thinking(project_id, requirement_card)
+
+        await websocket.send_json({
+            "type": "stage_transition",
+            "stage": pipeline_result.get("new_stage", ProjectStage.STRUCTURE),
+            "thinking_report": pipeline_result.get("thinking_report"),
+            "structure": pipeline_result.get("structure"),
+        })
+        logger.info(f"Pipeline complete for project {project_id[:8]}")
+    except Exception as e:
+        logger.error(f"Pipeline failed: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "content": f"产品分析生成失败: {str(e)[:200]}",
+            })
+        except Exception:
+            pass

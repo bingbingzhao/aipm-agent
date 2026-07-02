@@ -26,7 +26,25 @@ export const useConversationStore = defineStore('conversation', () => {
           content: data.content,
           stage_complete: data.stage_complete,
           requirement_card: data.requirement_card,
-        })
+          stage_transition: data.stage_transition,
+        } as any)
+      } else if (data.type === 'progress') {
+        // Background pipeline progress
+        messages.value.push({
+          role: 'assistant',
+          content: data.content,
+          type: 'progress',
+        } as any)
+      } else if (data.type === 'stage_transition') {
+        // Pipeline result from background task
+        messages.value.push({
+          role: 'assistant',
+          content: '产品方案已生成！查看右侧面板了解更多。',
+          type: 'stage_transition',
+          stage: data.stage,
+          thinking_report: data.thinking_report,
+          structure: data.structure,
+        } as any)
       }
     }
 

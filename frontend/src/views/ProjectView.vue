@@ -2,6 +2,15 @@
   <div class="project-view">
     <StageIndicator :current-stage="pipelineStage" />
 
+    <!-- Stage navigation bar -->
+    <div v-if="pipelineStage !== 'idea'" class="stage-nav">
+      <el-button text @click="handleRegress" :loading="regressing">
+        <el-icon><ArrowLeft /></el-icon>
+        返回上一阶段
+      </el-button>
+      <span class="stage-hint-text">当前：{{ STAGE_LABELS[pipelineStage] || pipelineStage }}</span>
+    </div>
+
     <div class="project-content">
       <!-- Left: Chat Panel (Stage ①) -->
       <div v-if="showChat" class="chat-section">
@@ -261,6 +270,11 @@ const projectId = props.id
 
 const store = useProjectStore()
 const project = ref<Project | null>(null)
+const regressing = ref(false)
+const STAGE_LABELS_MAP: Record<string, string> = {
+  idea: '想法捕获', thinking: '产品思路', structure: '产品结构',
+  prototype: '原型', prd: 'PRD', delivery: '交付',
+}
 
 // Pipeline state
 const pipelineStage = ref('idea')
@@ -319,6 +333,36 @@ onMounted(async () => {
     // Project just created, no state yet
   }
 })
+
+const STAGE_LABELS = STAGE_LABELS_MAP
+
+async function handleRegress() {
+  regressing.value = true
+  try {
+    const result = await apiClient.post(`/api/projects/${projectId}/regress`, {})
+    pipelineStage.value = result.stage
+    project.value = result
+    // Clear local state for advanced stages
+    if (result.stage === 'idea') {
+      thinkingContent.value = ''
+      structureData.value = null
+      prototypeHtml.value = ''
+      validationScore.value = null
+      prdContent.value = ''
+      deliveryData.value = null
+    } else if (result.stage === 'thinking') {
+      structureData.value = null
+      prototypeHtml.value = ''
+      prdContent.value = ''
+      deliveryData.value = null
+    }
+    ElMessage.success(`已回退到「${STAGE_LABELS[result.stage]}」`)
+  } catch (e: any) {
+    ElMessage.error(e.message || '回退失败')
+  } finally {
+    regressing.value = false
+  }
+}
 
 const thinkingSections = computed(() => {
   if (!thinkingContent.value) return []

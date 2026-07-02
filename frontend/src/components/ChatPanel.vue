@@ -21,8 +21,12 @@
         </div>
         <div class="message-content">
           <div class="message-text">{{ msg.content }}</div>
+          <div v-if="msg.type === 'progress'" class="progress-notice">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            {{ msg.content }}
+          </div>
           <div v-if="msg.stage_complete" class="stage-complete-notice">
-            ✅ 需求卡片已完成，正在生成产品思路...
+            ✅ 需求已充足，正在生成产品方案...
           </div>
         </div>
       </div>
@@ -86,7 +90,7 @@ onUnmounted(() => {
   conversationStore.disconnect()
 })
 
-// Watch for stage complete
+// Watch for stage transition messages
 watch(
   () => conversationStore.messages,
   async (msgs) => {
@@ -94,13 +98,34 @@ watch(
     scrollToBottom()
 
     const lastMsg = msgs[msgs.length - 1]
-    if (lastMsg?.stage_transition && props.project?.stage === 'idea') {
+    if (!lastMsg) return
+
+    // Handle stage_transition (from background pipeline completion)
+    if (lastMsg.type === 'stage_transition' && lastMsg.stage && lastMsg.thinking_report) {
+      emit('stage-transition', {
+        stage: lastMsg.stage,
+        thinkingReport: lastMsg.thinking_report,
+        structure: lastMsg.structure,
+      })
+      return
+    }
+
+    // Handle pending transition (stage complete, pipeline running)
+    if (lastMsg.stage_transition?.pending) {
+      // Show progress, wait for stage_transition message
+      return
+    }
+
+    // Legacy: direct stage_transition in message
+    if (lastMsg.stage_transition?.to && props.project?.stage === 'idea') {
       emit('stage-transition', {
         stage: lastMsg.stage_transition.to,
         thinkingReport: lastMsg.thinking_report,
       })
+      return
     }
-    if (lastMsg?.stage_complete && props.project?.stage === 'idea') {
+
+    if (lastMsg.stage_complete && !lastMsg.stage_transition?.pending) {
       emit('stage-transition', { stage: 'thinking' })
     }
   },
