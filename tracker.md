@@ -25,9 +25,11 @@
 
 - [x] AIPM 端 AAT Spec 生成 ✅ 2026-07-02
 - [x] AAT 端消费 CLI ✅ 2026-07-02（`aat aipm` 命令，38 tests from 56KB spec）
-- [ ] `aat aipm --url http://aipm:8000 --pid xxx` 实时拉取测试
-- [ ] 前端 WebSocket 实际对接验证
-- [ ] 本地部署全栈跑通
+- [x] 追问引擎体验优化 ✅ 2026-07-02（6轮→2轮，3x 提速）
+- [x] WebSocket 全链路验证 ✅ 2026-07-02（2轮→requirement_card→auto ②③）
+- [ ] `aat aipm --url http://aipm:8000 --pid xxx` 实时拉取测试（太慢，5-pass LLM ~200s，留待优化）
+- [ ] 前端浏览器端实际验证（browser tool policy blocked）
+- [ ] Docker build 验证（Docker 未安装在 Mac mini）
 
 ## 风险
 

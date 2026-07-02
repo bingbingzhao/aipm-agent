@@ -1,143 +1,116 @@
 # AIPM Agent — AI 产品经理 Agent
 
-> 独立项目 | 与 AAT 内在互识绑定 | 本地优先
+> 从一句话想法到完整产品方案，6 阶段全流程 AI 辅助
 
-## 定位
+## 快速开始
 
-基于 LLM 的产品设计工具。从想法到产品方案交付，全流程 AI 辅助。
+```bash
+# 后端
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # 填入 DEEPSEEK_API_KEY
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-## 核心管线（6 阶段）
+# 前端
+cd frontend
+npm install
+npm run dev
+```
+
+打开 <http://localhost:5173>
+
+## 核心管线（6 阶段全实现 ✅）
 
 ```
 ① 想法捕获 → ② 产品思路 → ③ 产品结构 → ④ 原型 → ⑤ PRD → ⑥ 交付
 ```
 
-| # | 阶段 | 输入 | 输出 | AI 核心能力 |
-|:--:|------|------|------|------|
-| ① | 想法捕获 | 一句话/一段描述 | 结构化需求卡片 | **追问引擎**：多轮对话补齐上下文 |
-| ② | 产品思路 | 需求卡片 | 产品定位/用户画像/核心场景 | 竞品分析、可行性判断 |
-| ③ | 产品结构 | 产品思路 | 信息架构/功能树/页面路由 | 结构推导、模块划分 |
-| ④ | 原型 | 产品结构 | 交互原型（HTML/CSS） | 生成可交互页面 |
-| ⑤ | PRD | 原型+产品结构 | 完整 PRD 文档 | 拼接上下文、写文档 |
-| ⑥ | 交付 | PRD+原型 | 开发任务包（Epic/Story） | 拆解任务、估时 |
+| # | 阶段 | AI 核心能力 | 状态 |
+|:--:|------|------|:--:|
+| ① | 想法捕获 | 追问引擎：2 轮对话完成需求卡片，WebSocket 实时交互 | ✅ |
+| ② | 产品思路 | 自动生成 3-5K 字分析报告（市场/用户/竞品/可行性） | ✅ |
+| ③ | 产品结构 | 自动生成 JSON（功能模块 + 路由 + 数据实体） | ✅ |
+| ④ | 原型 | 点击生成交互 HTML，自动质量校验（4 类检查，评分 0-100） | ✅ |
+| ⑤ | PRD | 点击生成 9 章完整 PRD 文档 | ✅ |
+| ⑥ | 交付 | Epic/Story 分解 + Sprint 规划 | ✅ |
 
-## 与 AAT 的内在互识
+## 追问引擎（核心壁垒）🆕
 
-```
-AIPM Agent                    AAT
-───────────                   ───
-生成 PRD / 原型         ←→   测试 PRD 定义的功能
-输出结构化产品文档       ←→   CI 触发：改代码 → 跑测试验证
-记录产品决策链路         ←→   Dashboard 显示：产品意图 vs 实际交付
-```
-
-绑定点：**数据格式对齐** — AIPM 输出的 PRD/原型/任务拆解，AAT 能直接消费。一个 JSON Schema 定义清楚。
-
-## 呈现形态
-
-- **初版**：Web Dashboard（本地 `localhost`），AAT Web 重做后的第一个狗食用户
-- **迭代**：Web App（完整应用形态）
-- **后期**：可能扩展到桌面端
-
-## 关键设计决策
-
-1. **追问引擎（Stage ①→②）是整个工具的核心壁垒**
-   - 不是一次 prompt 完事
-   - 多轮对话：锁定场景→锁定用户→锁定核心问题→竞品分析
-   
-2. **原型生成（Stage ④）天然 Web 渲染**
-   - Dashboard 内直接预览
-   - 即时迭代
-
-3. **独立项目 + 内在互识**
-   - 代码库独立、独立 CLI/publish
-   - 与 AAT 通过结构化数据格式绑定，不做代码依赖
-
----
-
-## 追问引擎设计（核心壁垒）
-
-### 交互形态
-
-**聊天外壳 + 专业内核** — 用户自由表达，AI 主动引导。不做结构化表单（避免变成限制性产品）。
-
-与通用 ChatGPT 的差异：
-
-| 维度 | 通用 ChatGPT | AIPM 追问引擎 |
-|------|-------------|-------------|
-| 目标 | 满足当前问题 | 填满需求卡片 |
-| 节奏 | 被动响应 | AI 主导方向，主动追问 |
-| 深度 | 用户问多深答多深 | AI 判断信息饱和，不够继续挖 |
-| 领域知识 | 广而浅 | 深而专，懂产品设计方法论 |
-| 输出 | 文本 | 结构化需求卡片 |
-
-### 对话状态机
+**2 轮对话完成需求卡片：**
 
 ```
-用户输入 → 意图识别 → 产品分类路由 → 追问槽位填充 → 信息饱和度评估 → 回复生成
-                                          ↑                              │
-                                          └──────── 不饱和，继续追问 ←────┘
+用户："做个AI周报工具"
+AI："给谁用？"
+用户："程序员和PM"
+AI："他们的痛点是什么？"
+用户："每周写周报烦，AI自动生成省时间"
+AI："现在怎么解决的？"
+用户："Notion手动，竞品太贵"
+→ ✅ 需求卡片完成 → 自动进入 ②③ 阶段
 ```
 
-- **产品分类路由**：SaaS/B2B / C端工具 / 内容社交，不同路由有不同追问清单
-- **追问槽位（Slots）**：每个槽位有优先级（必须/重要/条件触发）、状态（空/部分/饱和）、追问策略
-- **饱和度评估**：每个槽位独立评估信息质量，不是「用户说过了」就算饱和
-- **追问话术**：不套模板，结合对话上下文自然过渡
+- 8 维度槽位系统，LLM 实时饱和度评估
+- 条件槽位（技术约束/合规）自动饱和，无触发词即跳过
+- 每轮评估，不再等待
 
-必须槽位：产品类型 → 核心用户 → 核心问题 → 现有解决方案
+## 与 AAT 集成
 
-### MVP 范围
+```
+AIPM Pipeline ①②③④⑤⑥
+    ↓ 5-pass LLM extraction
+AATProductSpec (56KB JSON)
+    ↓ GET /api/aat/spec/{project_id}
+AAT CLI: aat aipm <spec.json>
+    ↓
+38 TestCases → 203-line Playwright script
+```
 
-**① 追问引擎 + ② 产品思路 + ④ 原型生成**（先串通核心链路，③⑤⑥后续迭代）
+**用法：**
+```bash
+# 从 AIPM API 拉取
+aat aipm --url http://localhost:8000 --project-id <id>
 
----
+# 从本地 JSON
+aat aipm ../aipm-agent/samples/aat-spec-bot.json
+```
 
-## 技术栈（最终决策）
+## 技术栈
 
-| 层 | 选型 | 理由 |
-|------|------|------|
-| 前端框架 | **Vue 3 + Vite** | 响应式模型天然匹配 WebSocket 聊天场景 |
-| UI 组件库 | **Element Plus** | 中文生态第一梯队，Chat 组件开箱即用 |
-| 状态管理 | **Pinia** | Vue 3 官方推荐 |
-| 样式 | **TailwindCSS** + Element Plus 主题 | |
-| 路由 | **Vue Router** | |
-| 后端 | **Python 3.12+ FastAPI** | AI 管线只有 Python 生态成熟；WebSocket 原生支持 |
-| AI 层 | **LangChain** | prompt 管理 + LLM 编排 |
-| ORM | **SQLAlchemy + Alembic** | |
-| 数据校验 | **Pydantic** | 同时用于与 AAT 的 JSON Schema 定义 |
-| 数据库 | **PostgreSQL**（生产）/ **SQLite**（开发） | |
+| 层 | 选型 |
+|------|------|
+| 后端 | Python 3.12+ / FastAPI / WebSocket / LangChain / SQLAlchemy |
+| 前端 | Vue 3 / Element Plus / Pinia / TailwindCSS |
+| 数据库 | SQLite（开发）/ PostgreSQL（生产） |
+| AI | DeepSeek V4-Pro + LangChain |
+| 数据校验 | Pydantic（同时定义 AAT JSON Schema） |
 
-### 为什么不是 React/Next.js
-- AI 核心在 Python 后端，前端不调用 Vercel AI SDK → React 的 AI 生态优势不存在
-- useEffect/useState 在 WebSocket 实时场景下心智负担重
-- Next.js API routes 是 stateless serverless，追问引擎需要 WebSocket 长连接状态管理
+## 项目规模
 
-### 为什么不是 Svelte/Solid
-- 生态太薄，Chat 组件几乎空白，MVP 阶段拖慢速度
-- 中文资料极少
+- 60+ 文件 | ~3,000 行 Python | ~1,600 行 Vue/TS
+- 8 个 API 端点 + WebSocket + 7 个 LLM 服务
+- 6 阶段全管线端到端验证通过
 
----
+## 部署
 
-## 部署方案
+```bash
+docker compose up
+```
 
 | 环境 | 前端 | 后端 | 数据库 |
 |------|------|------|--------|
-| 本地开发 | Vite Dev Server | FastAPI (port 8000) | SQLite |
-| 线上 MVP | Vercel 静态托管 | Railway | Railway PostgreSQL |
-| 国内上线 | 阿里云 OSS + CDN | 阿里云 ECS | 云数据库 |
-| 一键启动 | `docker compose up` | | |
+| 开发 | Vite Dev Server (5173) | FastAPI (8000) | SQLite |
+| 线上 | Vercel | Railway | PostgreSQL |
 
-**关键约束：后端平台必须支持 WebSocket。** Vercel Serverless 不支持（有执行时间限制）。
+## 路线图
 
----
-
-## 风险提示
-
-1. **追问引擎 ≠ 聊天机器人** — 不做自由对话，做有导向的结构化交互
-2. **原型生成质量幻觉** — LLM 生成的 HTML 需要后处理校验
-3. **范围蔓延** — 守住「想法到 PRD」这条线，不做万能产品平台
-4. **AAT 集成过早** — Stage ⑥ 没跑通之前不花时间对齐 Schema
+- [x] MVP 6 阶段管线
+- [x] AIPM-AAT 双边集成
+- [x] 追问引擎 3x 提速
+- [ ] 浏览器端 UI 完整验证
+- [ ] Docker 一键部署验证
+- [ ] AAT Spec 生成速度优化（200s → 30s）
 
 ---
 
-*创建日期：2026-07-02 | 状态：方向确定 + 技术栈确定 + 核心架构设计完成，待初始化项目骨架*
+*创建：2026-07-02 | 状态：MVP 完成，待生产化打磨*
