@@ -106,14 +106,8 @@ async def regress_project(
         outputs.pop(stage, None)
     project.stage_outputs = outputs if outputs else None
 
-    # If going back to idea, clear conversations and requirement card too
-    if prev_stage == "idea":
-        project.requirement_card = None
-        from sqlalchemy import delete
-        from app.models.project import Conversation
-        await db.execute(
-            delete(Conversation).where(Conversation.project_id == project_id)
-        )
+    # NOTE: When going back to idea, we KEEP requirement_card and conversations
+    # so user can continue adjusting their input without losing context
 
     project.stage = prev_stage
     await db.commit()

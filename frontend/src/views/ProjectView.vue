@@ -342,20 +342,19 @@ async function handleRegress() {
     const result = await apiClient.post(`/api/projects/${projectId}/regress`, {})
     pipelineStage.value = result.stage
     project.value = result
-    // Clear local state for advanced stages
-    if (result.stage === 'idea') {
-      thinkingContent.value = ''
+    // Clear local state for stages we've regressed past
+    // Only clear stage outputs, NOT requirement_card or conversations
+    if (result.stage === 'thinking') {
       structureData.value = null
       prototypeHtml.value = ''
-      validationScore.value = null
       prdContent.value = ''
       deliveryData.value = null
-    } else if (result.stage === 'thinking') {
-      structureData.value = null
+    } else if (result.stage === 'structure') {
       prototypeHtml.value = ''
       prdContent.value = ''
       deliveryData.value = null
     }
+    // idea: keep everything (requirement_card, conversations stay)
     ElMessage.success(`已回退到「${STAGE_LABELS[result.stage]}」`)
   } catch (e: any) {
     ElMessage.error(e.message || '回退失败')
