@@ -1,0 +1,2032 @@
+{
+  "schema_version": "0.1.0",
+  "project": {
+    "id": "8df59728-f745-479b-9945-f5dc02013001",
+    "name": "远程团队每日站会Bot",
+    "description": "Slack集成分布式站会管理",
+    "target_url": "",
+    "stage": "delivery"
+  },
+  "generated_at": "2026-07-02T08:37:24",
+  "features": [
+    {
+      "id": "feat-001",
+      "name": "创建站会",
+      "description": "团队负责人通过Slack命令或Bot按钮创建异步站会，配置名称、提醒时间、目标频道和模板字段。",
+      "priority": "p0",
+      "depends_on": [],
+      "tags": [
+        "slack",
+        "standup",
+        "creation"
+      ],
+      "criteria": [
+        {
+          "description": "用户通过Slack命令创建站会，Bot返回交互式表单",
+          "criteria_type": "functional",
+          "given": "用户在Slack工作区中已安装Bot",
+          "when": "用户在Slack中输入 `/standup create` 命令或点击Bot的“创建站会”按钮",
+          "then": "Bot返回一个交互式表单，包含站会名称、提醒时间、目标频道、模板字段（默认：昨天做了什么/今天计划做什么/有什么阻塞）等必填项",
+          "priority": "p0",
+          "tags": [
+            "slack-command",
+            "interactive-form"
+          ]
+        },
+        {
+          "description": "用户提交表单后，Bot在指定频道发送确认消息并开始定时提醒",
+          "criteria_type": "functional",
+          "given": "用户已填写并提交创建站会的表单",
+          "when": "用户提交表单",
+          "then": "Bot在指定的目标频道发送确认消息，并开始按设定的提醒时间发送每日站会提醒",
+          "priority": "p0",
+          "tags": [
+            "confirmation",
+            "scheduling"
+          ]
+        },
+        {
+          "description": "用户未填写必填项时，Bot提示错误并阻止提交",
+          "criteria_type": "error",
+          "given": "用户在创建站会的表单中未填写站会名称等必填项",
+          "when": "用户尝试提交表单",
+          "then": "Bot提示错误信息（如“站会名称为必填项”）并阻止提交",
+          "priority": "p0",
+          "tags": [
+            "validation",
+            "error-handling"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feat-002",
+      "name": "Bot提醒与回答收集",
+      "description": "Bot在设定的时间通过私信提醒团队成员填写站会，收集并汇总回答发布到团队频道。",
+      "priority": "p0",
+      "depends_on": [
+        "feat-001"
+      ],
+      "tags": [
+        "slack",
+        "standup",
+        "reminder",
+        "collection"
+      ],
+      "criteria": [
+        {
+          "description": "Bot在设定时间向团队成员发送私信提醒填写站会",
+          "criteria_type": "functional",
+          "given": "站会已创建并配置了提醒时间",
+          "when": "到达设定的提醒时间",
+          "then": "Bot向所有团队成员发送Slack私信，包含填写站会的交互式表单（按模板字段）",
+          "priority": "p0",
+          "tags": [
+            "reminder",
+            "direct-message"
+          ]
+        },
+        {
+          "description": "Bot收集所有回答后自动汇总并发布到团队频道",
+          "criteria_type": "functional",
+          "given": "团队成员已通过私信提交站会回答",
+          "when": "所有成员提交完毕或到达截止时间（如设定）",
+          "then": "Bot自动汇总所有回答，生成结构化报告并发布到站会指定的团队频道",
+          "priority": "p0",
+          "tags": [
+            "aggregation",
+            "channel-post"
+          ]
+        },
+        {
+          "description": "团队成员未在截止时间前提交，Bot发送提醒并标记未提交",
+          "criteria_type": "edge_case",
+          "given": "站会设定了截止时间，部分成员未提交",
+          "when": "截止时间到达",
+          "then": "Bot在团队频道发布汇总报告，并标记未提交的成员（如“张三：未提交”），同时向未提交成员发送提醒私信",
+          "priority": "p1",
+          "tags": [
+            "deadline",
+            "missed-submission"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feat-003",
+      "name": "PM仪表盘概览",
+      "description": "为团队负责人提供Web仪表盘，展示站会参与率、阻塞项和团队健康度等关键指标。",
+      "priority": "p0",
+      "depends_on": [
+        "feat-002"
+      ],
+      "tags": [
+        "web",
+        "dashboard",
+        "analytics"
+      ],
+      "criteria": [
+        {
+          "description": "仪表盘显示站会参与率趋势图",
+          "criteria_type": "functional",
+          "given": "团队已有至少一周的站会数据",
+          "when": "团队负责人访问 `/dashboard/overview` 页面",
+          "then": "仪表盘展示参与率趋势图（按天/周），显示每日提交人数和百分比",
+          "priority": "p0",
+          "tags": [
+            "participation",
+            "chart"
+          ]
+        },
+        {
+          "description": "仪表盘显示当前阻塞项列表及状态",
+          "criteria_type": "functional",
+          "given": "团队有已报告的阻塞项",
+          "when": "团队负责人访问 `/dashboard/blockers` 页面",
+          "then": "仪表盘以列表形式展示所有阻塞项，包含描述、报告人、状态（待解决/处理中/已解决）和创建时间",
+          "priority": "p0",
+          "tags": [
+            "blockers",
+            "list"
+          ]
+        },
+        {
+          "description": "仪表盘数据为空时显示友好提示",
+          "criteria_type": "ui",
+          "given": "团队刚创建，尚无站会数据",
+          "when": "团队负责人访问仪表盘",
+          "then": "仪表盘显示“暂无数据，请先创建站会”的提示，并提供创建站会的链接",
+          "priority": "p1",
+          "tags": [
+            "empty-state",
+            "onboarding"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feat-004",
+      "name": "团队管理",
+      "description": "允许团队负责人管理团队成员、角色和设置，包括添加/移除成员、分配角色。",
+      "priority": "p1",
+      "depends_on": [],
+      "tags": [
+        "team",
+        "management",
+        "admin"
+      ],
+      "criteria": [
+        {
+          "description": "团队负责人可以添加新成员到团队",
+          "criteria_type": "functional",
+          "given": "团队负责人已登录Web仪表盘",
+          "when": "在 `/team/members` 页面点击“添加成员”并输入Slack用户ID或邮箱",
+          "then": "系统发送邀请通知给该用户，用户接受后加入团队",
+          "priority": "p1",
+          "tags": [
+            "add-member",
+            "invitation"
+          ]
+        },
+        {
+          "description": "团队负责人可以移除成员并确认",
+          "criteria_type": "functional",
+          "given": "团队中有现有成员",
+          "when": "在 `/team/members` 页面点击“移除”按钮并确认",
+          "then": "该成员从团队中移除，不再接收站会提醒，相关数据保留但标记为已移除",
+          "priority": "p1",
+          "tags": [
+            "remove-member",
+            "confirmation"
+          ]
+        },
+        {
+          "description": "尝试添加已存在的成员时提示错误",
+          "criteria_type": "error",
+          "given": "用户已在团队中",
+          "when": "团队负责人尝试添加该用户",
+          "then": "系统提示“该用户已是团队成员”并阻止重复添加",
+          "priority": "p1",
+          "tags": [
+            "duplicate",
+            "error-handling"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feat-005",
+      "name": "个人设置",
+      "description": "允许用户配置个人偏好，包括时区、通知时间和站会模板偏好。",
+      "priority": "p1",
+      "depends_on": [],
+      "tags": [
+        "user",
+        "settings",
+        "preferences"
+      ],
+      "criteria": [
+        {
+          "description": "用户可以设置自己的时区",
+          "criteria_type": "functional",
+          "given": "用户已登录Web仪表盘",
+          "when": "在 `/settings/profile` 页面选择时区并保存",
+          "then": "系统更新用户的时区设置，站会提醒时间将基于该时区计算",
+          "priority": "p1",
+          "tags": [
+            "timezone",
+            "profile"
+          ]
+        },
+        {
+          "description": "用户可以设置通知时间偏好",
+          "criteria_type": "functional",
+          "given": "用户已登录Web仪表盘",
+          "when": "在 `/settings/notifications` 页面设置通知时间并保存",
+          "then": "系统在设定的时间发送站会提醒私信，覆盖团队默认时间",
+          "priority": "p1",
+          "tags": [
+            "notification",
+            "time"
+          ]
+        },
+        {
+          "description": "用户设置无效时区时提示错误",
+          "criteria_type": "error",
+          "given": "用户输入了不存在的时区字符串",
+          "when": "用户尝试保存时区设置",
+          "then": "系统提示“无效的时区，请从列表中选择”并阻止保存",
+          "priority": "p1",
+          "tags": [
+            "validation",
+            "error-handling"
+          ]
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "route": "/standup/create",
+      "title": "创建站会",
+      "description": "在 Slack 中快速创建异步站会，配置名称、提醒时间、目标频道和模板字段",
+      "states": [
+        "default",
+        "loading",
+        "error"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='standup-name-input']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "textbox",
+          "inputType": "text",
+          "placeholder": "输入站会名称"
+        },
+        {
+          "selector": "[data-testid='schedule-time-picker']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "combobox",
+          "inputType": "time",
+          "placeholder": "选择提醒时间"
+        },
+        {
+          "selector": "[data-testid='channel-select']",
+          "tag": "select",
+          "type": "select",
+          "text": "",
+          "role": "listbox",
+          "inputType": "",
+          "placeholder": "选择目标频道"
+        },
+        {
+          "selector": "[data-testid='template-editor']",
+          "tag": "textarea",
+          "type": "textarea",
+          "text": "",
+          "role": "textbox",
+          "inputType": "",
+          "placeholder": "编辑模板字段（默认：昨天做了什么/今天计划做什么/有什么阻塞）"
+        },
+        {
+          "selector": "[data-testid='submit-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "创建站会",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='cancel-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "取消",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/standup/config",
+      "title": "站会配置",
+      "description": "查看和修改已有站会的配置，包括提醒时间、频道、模板等",
+      "states": [
+        "default",
+        "loading",
+        "error"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='config-standup-name']",
+          "tag": "h2",
+          "type": "heading",
+          "text": "站会名称",
+          "role": "heading",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='config-schedule-time']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "textbox",
+          "inputType": "time",
+          "placeholder": "修改提醒时间"
+        },
+        {
+          "selector": "[data-testid='config-channel-select']",
+          "tag": "select",
+          "type": "select",
+          "text": "",
+          "role": "listbox",
+          "inputType": "",
+          "placeholder": "修改目标频道"
+        },
+        {
+          "selector": "[data-testid='config-template-editor']",
+          "tag": "textarea",
+          "type": "textarea",
+          "text": "",
+          "role": "textbox",
+          "inputType": "",
+          "placeholder": "修改模板字段"
+        },
+        {
+          "selector": "[data-testid='save-config-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "保存配置",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='delete-standup-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "删除站会",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/standup/report",
+      "title": "站会报告",
+      "description": "查看某次站会的汇总报告，包含所有成员的提交内容和阻塞项",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "empty"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='report-date']",
+          "tag": "span",
+          "type": "text",
+          "text": "报告日期",
+          "role": "contentinfo",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='report-summary']",
+          "tag": "div",
+          "type": "container",
+          "text": "",
+          "role": "region",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='member-response-card']",
+          "tag": "div",
+          "type": "container",
+          "text": "",
+          "role": "listitem",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='blocker-list']",
+          "tag": "ul",
+          "type": "list",
+          "text": "",
+          "role": "list",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='export-report-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "导出报告",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/standup/history",
+      "title": "历史记录",
+      "description": "查看团队所有历史站会记录，按日期筛选和搜索",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "empty"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='history-date-filter']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "textbox",
+          "inputType": "date",
+          "placeholder": "筛选日期"
+        },
+        {
+          "selector": "[data-testid='history-search-input']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "searchbox",
+          "inputType": "text",
+          "placeholder": "搜索站会记录"
+        },
+        {
+          "selector": "[data-testid='history-list']",
+          "tag": "div",
+          "type": "container",
+          "text": "",
+          "role": "list",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='history-item']",
+          "tag": "a",
+          "type": "link",
+          "text": "站会日期 - 参与人数",
+          "role": "link",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='load-more-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "加载更多",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/dashboard/overview",
+      "title": "仪表盘概览",
+      "description": "团队站会整体概览，显示参与率、阻塞项数量、最新更新等关键指标",
+      "states": [
+        "default",
+        "loading",
+        "error"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='participation-rate']",
+          "tag": "div",
+          "type": "container",
+          "text": "参与率: 85%",
+          "role": "status",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='total-blockers']",
+          "tag": "div",
+          "type": "container",
+          "text": "阻塞项: 3",
+          "role": "status",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='recent-updates']",
+          "tag": "ul",
+          "type": "list",
+          "text": "",
+          "role": "list",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='team-health-score']",
+          "tag": "div",
+          "type": "container",
+          "text": "团队健康度: 良好",
+          "role": "status",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='refresh-dashboard-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "刷新数据",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/dashboard/team-health",
+      "title": "团队健康度",
+      "description": "可视化展示团队健康度趋势，包括参与率、响应时间、阻塞项变化等",
+      "states": [
+        "default",
+        "loading",
+        "error"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='health-trend-chart']",
+          "tag": "canvas",
+          "type": "canvas",
+          "text": "",
+          "role": "img",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='participation-trend']",
+          "tag": "div",
+          "type": "container",
+          "text": "参与率趋势",
+          "role": "region",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='response-time-trend']",
+          "tag": "div",
+          "type": "container",
+          "text": "响应时间趋势",
+          "role": "region",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='blocker-trend']",
+          "tag": "div",
+          "type": "container",
+          "text": "阻塞项趋势",
+          "role": "region",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='health-insights']",
+          "tag": "p",
+          "type": "text",
+          "text": "团队参与率连续下降，建议关注成员状态",
+          "role": "alert",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/dashboard/blockers",
+      "title": "阻塞项管理",
+      "description": "集中查看和管理团队所有阻塞项，支持标记解决和分配负责人",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "empty"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='blocker-list-table']",
+          "tag": "table",
+          "type": "table",
+          "text": "",
+          "role": "table",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='blocker-status-filter']",
+          "tag": "select",
+          "type": "select",
+          "text": "",
+          "role": "listbox",
+          "inputType": "",
+          "placeholder": "筛选状态"
+        },
+        {
+          "selector": "[data-testid='resolve-blocker-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "标记已解决",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='assign-blocker-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "分配负责人",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='blocker-detail-modal']",
+          "tag": "div",
+          "type": "container",
+          "text": "",
+          "role": "dialog",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/team/members",
+      "title": "成员管理",
+      "description": "查看和管理团队成员列表，包括角色、时区、参与状态等",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "empty"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='member-list']",
+          "tag": "ul",
+          "type": "list",
+          "text": "",
+          "role": "list",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='member-name']",
+          "tag": "span",
+          "type": "text",
+          "text": "成员姓名",
+          "role": "contentinfo",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='member-role']",
+          "tag": "span",
+          "type": "text",
+          "text": "角色",
+          "role": "contentinfo",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='member-timezone']",
+          "tag": "span",
+          "type": "text",
+          "text": "时区",
+          "role": "contentinfo",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='invite-member-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "邀请成员",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/team/settings",
+      "title": "团队设置",
+      "description": "配置团队基本信息，如团队名称、默认时区、通知偏好等",
+      "states": [
+        "default",
+        "loading",
+        "error"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='team-name-input']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "textbox",
+          "inputType": "text",
+          "placeholder": "输入团队名称"
+        },
+        {
+          "selector": "[data-testid='default-timezone-select']",
+          "tag": "select",
+          "type": "select",
+          "text": "",
+          "role": "listbox",
+          "inputType": "",
+          "placeholder": "选择默认时区"
+        },
+        {
+          "selector": "[data-testid='notification-preference']",
+          "tag": "fieldset",
+          "type": "fieldset",
+          "text": "",
+          "role": "group",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='save-team-settings-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "保存设置",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/team/billing",
+      "title": "订阅管理",
+      "description": "查看和升级团队订阅计划，管理支付方式",
+      "states": [
+        "default",
+        "loading",
+        "error"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='current-plan']",
+          "tag": "div",
+          "type": "container",
+          "text": "当前计划: 免费版",
+          "role": "status",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='upgrade-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "升级到专业版",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='payment-method']",
+          "tag": "div",
+          "type": "container",
+          "text": "支付方式: 无",
+          "role": "region",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='billing-history']",
+          "tag": "table",
+          "type": "table",
+          "text": "",
+          "role": "table",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='cancel-subscription-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "取消订阅",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/settings/profile",
+      "title": "个人资料",
+      "description": "编辑个人资料，包括姓名、时区、Slack 账号关联等",
+      "states": [
+        "default",
+        "loading",
+        "error"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='profile-name-input']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "textbox",
+          "inputType": "text",
+          "placeholder": "输入姓名"
+        },
+        {
+          "selector": "[data-testid='profile-timezone-select']",
+          "tag": "select",
+          "type": "select",
+          "text": "",
+          "role": "listbox",
+          "inputType": "",
+          "placeholder": "选择时区"
+        },
+        {
+          "selector": "[data-testid='slack-account-status']",
+          "tag": "span",
+          "type": "text",
+          "text": "已关联 Slack 账号",
+          "role": "status",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='save-profile-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "保存",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/settings/notifications",
+      "title": "通知设置",
+      "description": "配置个人通知偏好，包括提醒时间、渠道等",
+      "states": [
+        "default",
+        "loading",
+        "error"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='notification-time-picker']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "textbox",
+          "inputType": "time",
+          "placeholder": "选择提醒时间"
+        },
+        {
+          "selector": "[data-testid='notification-channel-select']",
+          "tag": "select",
+          "type": "select",
+          "text": "",
+          "role": "listbox",
+          "inputType": "",
+          "placeholder": "选择通知渠道"
+        },
+        {
+          "selector": "[data-testid='mute-notifications-toggle']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "switch",
+          "inputType": "checkbox",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='save-notification-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "保存通知设置",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/settings/template",
+      "title": "模板偏好",
+      "description": "自定义站会回答模板，添加或修改字段",
+      "states": [
+        "default",
+        "loading",
+        "error"
+      ],
+      "elements": [
+        {
+          "selector": "[data-testid='template-field-list']",
+          "tag": "ul",
+          "type": "list",
+          "text": "",
+          "role": "list",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='add-field-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "添加字段",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        },
+        {
+          "selector": "[data-testid='field-name-input']",
+          "tag": "input",
+          "type": "input",
+          "text": "",
+          "role": "textbox",
+          "inputType": "text",
+          "placeholder": "字段名称"
+        },
+        {
+          "selector": "[data-testid='field-type-select']",
+          "tag": "select",
+          "type": "select",
+          "text": "",
+          "role": "listbox",
+          "inputType": "",
+          "placeholder": "字段类型"
+        },
+        {
+          "selector": "[data-testid='save-template-btn']",
+          "tag": "button",
+          "type": "button",
+          "text": "保存模板",
+          "role": "button",
+          "inputType": "",
+          "placeholder": ""
+        }
+      ]
+    },
+    {
+      "route": "/help/guide",
+      "title": "使用指南",
+      "description": "产品使用指南，包含快速入门、常见操作说明"
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow-001",
+      "name": "创建异步站会",
+      "description": "团队负责人在 Slack 中通过命令或按钮创建新的异步站会，配置名称、时间、频道和模板。",
+      "start_page": "/standup/create",
+      "feature_id": "feat-001",
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/standup/create",
+          "value": "",
+          "description": "访问创建站会页面"
+        },
+        {
+          "action": "fill",
+          "target": "[data-testid='standup-name-input']",
+          "value": "每日站会",
+          "description": "输入站会名称"
+        },
+        {
+          "action": "fill",
+          "target": "[data-testid='standup-time-input']",
+          "value": "09:00",
+          "description": "设置提醒时间"
+        },
+        {
+          "action": "select",
+          "target": "[data-testid='standup-channel-select']",
+          "value": "team-channel",
+          "description": "选择目标频道"
+        },
+        {
+          "action": "click",
+          "target": "[data-testid='standup-submit-btn']",
+          "value": "",
+          "description": "提交创建站会表单"
+        },
+        {
+          "action": "wait",
+          "target": ".success-message",
+          "value": "",
+          "description": "等待创建成功确认消息"
+        }
+      ]
+    },
+    {
+      "id": "flow-002",
+      "name": "填写每日站会回答",
+      "description": "开发者收到 Slack Bot 私信提醒后，按模板填写昨天、今天和阻塞项，提交回答。",
+      "start_page": "/standup/report",
+      "feature_id": "feat-002",
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/standup/report",
+          "value": "",
+          "description": "访问站会报告页面"
+        },
+        {
+          "action": "fill",
+          "target": "[data-testid='yesterday-input']",
+          "value": "完成了用户登录模块开发",
+          "description": "填写昨天完成的工作"
+        },
+        {
+          "action": "fill",
+          "target": "[data-testid='today-input']",
+          "value": "开始测试和修复bug",
+          "description": "填写今天计划的工作"
+        },
+        {
+          "action": "fill",
+          "target": "[data-testid='blocker-input']",
+          "value": "等待API文档更新",
+          "description": "填写遇到的阻塞项"
+        },
+        {
+          "action": "click",
+          "target": "[data-testid='submit-report-btn']",
+          "value": "",
+          "description": "提交站会回答"
+        },
+        {
+          "action": "wait",
+          "target": ".report-success",
+          "value": "",
+          "description": "等待提交成功确认"
+        }
+      ]
+    },
+    {
+      "id": "flow-003",
+      "name": "查看团队健康度仪表盘",
+      "description": "团队负责人访问 PM 仪表盘，查看团队参与率、阻塞项分布等健康度指标。",
+      "start_page": "/dashboard/team-health",
+      "feature_id": "feat-003",
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/dashboard/team-health",
+          "value": "",
+          "description": "访问团队健康度页面"
+        },
+        {
+          "action": "wait",
+          "target": "[data-testid='participation-rate']",
+          "value": "",
+          "description": "等待参与率数据加载"
+        },
+        {
+          "action": "click",
+          "target": "[data-testid='blocker-list-btn']",
+          "value": "",
+          "description": "点击查看阻塞项列表"
+        },
+        {
+          "action": "wait",
+          "target": "[data-testid='blocker-item']",
+          "value": "",
+          "description": "等待阻塞项列表加载"
+        },
+        {
+          "action": "click",
+          "target": "[data-testid='export-report-btn']",
+          "value": "",
+          "description": "点击导出报告按钮"
+        },
+        {
+          "action": "wait",
+          "target": ".download-complete",
+          "value": "",
+          "description": "等待报告下载完成"
+        }
+      ]
+    }
+  ],
+  "api_contracts": [
+    {
+      "method": "GET",
+      "path": "/api/teams",
+      "summary": "获取团队列表",
+      "description": "获取当前用户所属的所有团队列表",
+      "auth_required": true,
+      "tags": [
+        "team"
+      ],
+      "query_params": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "description": "页码"
+        },
+        {
+          "name": "per_page",
+          "type": "integer",
+          "required": false,
+          "description": "每页数量"
+        }
+      ],
+      "path_params": [],
+      "responses": {
+        "200": {
+          "description": "成功返回团队列表"
+        },
+        "401": {
+          "description": "未授权"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/teams",
+      "summary": "创建团队",
+      "description": "创建一个新的团队，关联 Slack 工作区",
+      "auth_required": true,
+      "tags": [
+        "team"
+      ],
+      "query_params": [],
+      "path_params": [],
+      "responses": {
+        "201": {
+          "description": "团队创建成功"
+        },
+        "400": {
+          "description": "请求参数错误"
+        },
+        "409": {
+          "description": "团队已存在"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/teams/{team_id}",
+      "summary": "获取团队详情",
+      "description": "根据团队ID获取团队详细信息",
+      "auth_required": true,
+      "tags": [
+        "team"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "成功返回团队详情"
+        },
+        "404": {
+          "description": "团队不存在"
+        }
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/teams/{team_id}",
+      "summary": "更新团队信息",
+      "description": "更新团队名称、计划、最大成员数等信息",
+      "auth_required": true,
+      "tags": [
+        "team"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "团队更新成功"
+        },
+        "400": {
+          "description": "请求参数错误"
+        },
+        "404": {
+          "description": "团队不存在"
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/teams/{team_id}",
+      "summary": "删除团队",
+      "description": "删除指定团队及其所有关联数据",
+      "auth_required": true,
+      "tags": [
+        "team"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        }
+      ],
+      "responses": {
+        "204": {
+          "description": "团队删除成功"
+        },
+        "404": {
+          "description": "团队不存在"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/teams/{team_id}/members",
+      "summary": "获取团队成员列表",
+      "description": "获取指定团队的所有成员信息",
+      "auth_required": true,
+      "tags": [
+        "team",
+        "user"
+      ],
+      "query_params": [
+        {
+          "name": "role",
+          "type": "string",
+          "required": false,
+          "description": "按角色筛选"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "成功返回成员列表"
+        },
+        "404": {
+          "description": "团队不存在"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/teams/{team_id}/members",
+      "summary": "添加团队成员",
+      "description": "向团队中添加新成员",
+      "auth_required": true,
+      "tags": [
+        "team",
+        "user"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        }
+      ],
+      "responses": {
+        "201": {
+          "description": "成员添加成功"
+        },
+        "400": {
+          "description": "请求参数错误"
+        },
+        "409": {
+          "description": "成员已存在"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/{user_id}",
+      "summary": "获取用户信息",
+      "description": "获取指定用户的详细信息",
+      "auth_required": true,
+      "tags": [
+        "user"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "user_id",
+          "type": "string",
+          "required": true,
+          "description": "用户ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "成功返回用户信息"
+        },
+        "404": {
+          "description": "用户不存在"
+        }
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/users/{user_id}",
+      "summary": "更新用户设置",
+      "description": "更新用户的时区、通知时间、角色等个人设置",
+      "auth_required": true,
+      "tags": [
+        "user"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "user_id",
+          "type": "string",
+          "required": true,
+          "description": "用户ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "用户设置更新成功"
+        },
+        "400": {
+          "description": "请求参数错误"
+        },
+        "404": {
+          "description": "用户不存在"
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/teams/{team_id}/members/{user_id}",
+      "summary": "移除团队成员",
+      "description": "从团队中移除指定成员",
+      "auth_required": true,
+      "tags": [
+        "team",
+        "user"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        },
+        {
+          "name": "user_id",
+          "type": "string",
+          "required": true,
+          "description": "用户ID"
+        }
+      ],
+      "responses": {
+        "204": {
+          "description": "成员移除成功"
+        },
+        "404": {
+          "description": "成员或团队不存在"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/standups",
+      "summary": "获取站会列表",
+      "description": "获取当前团队的所有站会配置",
+      "auth_required": true,
+      "tags": [
+        "standup"
+      ],
+      "query_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "required": false,
+          "description": "筛选活跃/非活跃站会"
+        }
+      ],
+      "path_params": [],
+      "responses": {
+        "200": {
+          "description": "成功返回站会列表"
+        },
+        "400": {
+          "description": "缺少必要参数"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/standups",
+      "summary": "创建站会",
+      "description": "创建一个新的异步站会，包含名称、提醒时间、目标频道和模板配置",
+      "auth_required": true,
+      "tags": [
+        "standup"
+      ],
+      "query_params": [],
+      "path_params": [],
+      "responses": {
+        "201": {
+          "description": "站会创建成功"
+        },
+        "400": {
+          "description": "请求参数错误"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/standups/{standup_id}",
+      "summary": "获取站会详情",
+      "description": "获取指定站会的详细配置信息",
+      "auth_required": true,
+      "tags": [
+        "standup"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "standup_id",
+          "type": "string",
+          "required": true,
+          "description": "站会ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "成功返回站会详情"
+        },
+        "404": {
+          "description": "站会不存在"
+        }
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/standups/{standup_id}",
+      "summary": "更新站会配置",
+      "description": "更新站会的名称、提醒时间、模板等配置信息",
+      "auth_required": true,
+      "tags": [
+        "standup"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "standup_id",
+          "type": "string",
+          "required": true,
+          "description": "站会ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "站会配置更新成功"
+        },
+        "400": {
+          "description": "请求参数错误"
+        },
+        "404": {
+          "description": "站会不存在"
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/standups/{standup_id}",
+      "summary": "删除站会",
+      "description": "删除指定的站会配置及其所有相关响应数据",
+      "auth_required": true,
+      "tags": [
+        "standup"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "standup_id",
+          "type": "string",
+          "required": true,
+          "description": "站会ID"
+        }
+      ],
+      "responses": {
+        "204": {
+          "description": "站会删除成功"
+        },
+        "404": {
+          "description": "站会不存在"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/standups/{standup_id}/submit",
+      "summary": "提交站会响应",
+      "description": "用户提交当日的站会响应内容",
+      "auth_required": true,
+      "tags": [
+        "standup",
+        "response"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "standup_id",
+          "type": "string",
+          "required": true,
+          "description": "站会ID"
+        }
+      ],
+      "responses": {
+        "201": {
+          "description": "站会响应提交成功"
+        },
+        "400": {
+          "description": "请求参数错误"
+        },
+        "409": {
+          "description": "今日已提交过响应"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/standups/{standup_id}/responses",
+      "summary": "获取站会响应列表",
+      "description": "获取指定站会的所有响应记录，可按日期筛选",
+      "auth_required": true,
+      "tags": [
+        "standup",
+        "response"
+      ],
+      "query_params": [
+        {
+          "name": "date",
+          "type": "string",
+          "required": false,
+          "description": "按日期筛选（YYYY-MM-DD）"
+        },
+        {
+          "name": "user_id",
+          "type": "string",
+          "required": false,
+          "description": "按用户筛选"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "standup_id",
+          "type": "string",
+          "required": true,
+          "description": "站会ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "成功返回响应列表"
+        },
+        "404": {
+          "description": "站会不存在"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/standups/{standup_id}/responses/{response_id}",
+      "summary": "获取站会响应详情",
+      "description": "获取单条站会响应的详细内容",
+      "auth_required": true,
+      "tags": [
+        "standup",
+        "response"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "standup_id",
+          "type": "string",
+          "required": true,
+          "description": "站会ID"
+        },
+        {
+          "name": "response_id",
+          "type": "string",
+          "required": true,
+          "description": "响应ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "成功返回响应详情"
+        },
+        "404": {
+          "description": "响应不存在"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/standups/{standup_id}/report",
+      "summary": "获取站会报告",
+      "description": "生成并获取指定站会的汇总报告，包含参与率、阻塞项统计等",
+      "auth_required": true,
+      "tags": [
+        "standup",
+        "report"
+      ],
+      "query_params": [
+        {
+          "name": "start_date",
+          "type": "string",
+          "required": false,
+          "description": "开始日期"
+        },
+        {
+          "name": "end_date",
+          "type": "string",
+          "required": false,
+          "description": "结束日期"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "standup_id",
+          "type": "string",
+          "required": true,
+          "description": "站会ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "成功返回站会报告"
+        },
+        "404": {
+          "description": "站会不存在"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/standups/{standup_id}/history",
+      "summary": "获取站会历史记录",
+      "description": "获取指定站会的历史响应记录，按日期倒序排列",
+      "auth_required": true,
+      "tags": [
+        "standup",
+        "history"
+      ],
+      "query_params": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "description": "页码"
+        },
+        {
+          "name": "per_page",
+          "type": "integer",
+          "required": false,
+          "description": "每页数量"
+        },
+        {
+          "name": "start_date",
+          "type": "string",
+          "required": false,
+          "description": "开始日期"
+        },
+        {
+          "name": "end_date",
+          "type": "string",
+          "required": false,
+          "description": "结束日期"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "standup_id",
+          "type": "string",
+          "required": true,
+          "description": "站会ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "成功返回历史记录"
+        },
+        "404": {
+          "description": "站会不存在"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard/overview",
+      "summary": "获取仪表盘概览",
+      "description": "获取团队整体站会参与情况、趋势等概览数据",
+      "auth_required": true,
+      "tags": [
+        "dashboard"
+      ],
+      "query_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        },
+        {
+          "name": "period",
+          "type": "string",
+          "required": false,
+          "description": "统计周期（week/month/quarter）"
+        }
+      ],
+      "path_params": [],
+      "responses": {
+        "200": {
+          "description": "成功返回仪表盘概览数据"
+        },
+        "400": {
+          "description": "缺少必要参数"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard/team-health",
+      "summary": "获取团队健康度",
+      "description": "获取团队参与率、响应趋势、活跃度等健康度指标",
+      "auth_required": true,
+      "tags": [
+        "dashboard"
+      ],
+      "query_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        },
+        {
+          "name": "start_date",
+          "type": "string",
+          "required": false,
+          "description": "开始日期"
+        },
+        {
+          "name": "end_date",
+          "type": "string",
+          "required": false,
+          "description": "结束日期"
+        }
+      ],
+      "path_params": [],
+      "responses": {
+        "200": {
+          "description": "成功返回团队健康度数据"
+        },
+        "400": {
+          "description": "缺少必要参数"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard/blockers",
+      "summary": "获取阻塞项列表",
+      "description": "获取团队所有阻塞项，支持按状态筛选",
+      "auth_required": true,
+      "tags": [
+        "dashboard",
+        "blocker"
+      ],
+      "query_params": [
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "description": "团队ID"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "description": "按状态筛选（open/resolved）"
+        },
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "description": "页码"
+        },
+        {
+          "name": "per_page",
+          "type": "integer",
+          "required": false,
+          "description": "每页数量"
+        }
+      ],
+      "path_params": [],
+      "responses": {
+        "200": {
+          "description": "成功返回阻塞项列表"
+        },
+        "400": {
+          "description": "缺少必要参数"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/blockers",
+      "summary": "创建阻塞项",
+      "description": "报告一个新的阻塞项",
+      "auth_required": true,
+      "tags": [
+        "blocker"
+      ],
+      "query_params": [],
+      "path_params": [],
+      "responses": {
+        "201": {
+          "description": "阻塞项创建成功"
+        },
+        "400": {
+          "description": "请求参数错误"
+        }
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/blockers/{blocker_id}",
+      "summary": "更新阻塞项状态",
+      "description": "更新阻塞项的状态（如标记为已解决）",
+      "auth_required": true,
+      "tags": [
+        "blocker"
+      ],
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "blocker_id",
+          "type": "string",
+          "required": true,
+          "description": "阻塞项ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "阻塞项更新成功"
+        },
+        "400": {
+          "description": "请求参数错误"
+        },
+        "404": {
+          "description": "阻塞项不存在"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/teams/{team_id}/settings",
+      "summary": "获取团队设置",
+      "description": "获取团队的配置信息，包括通知设置、模板偏好等",
+      "auth_required": true
+    }
+  ],
+  "business_rules": [
+    {
+      "id": "rule-001",
+      "name": "免费版成员上限",
+      "description": "免费版最多支持10名团队成员，超出需升级付费计划",
+      "rule_type": "authorization",
+      "condition": "团队计划为免费版且成员数超过10",
+      "expected_behavior": "禁止添加新成员，提示升级付费计划",
+      "related_features": [
+        "team/members",
+        "team/billing"
+      ]
+    },
+    {
+      "id": "rule-002",
+      "name": "站会创建必填项验证",
+      "description": "创建站会时，站会名称、提醒时间、目标频道和模板字段为必填项",
+      "rule_type": "validation",
+      "condition": "用户提交创建站会表单时缺少必填项",
+      "expected_behavior": "Bot返回错误提示，阻止表单提交",
+      "related_features": [
+        "standup/create"
+      ]
+    },
+    {
+      "id": "rule-003",
+      "name": "异步站会提交时间窗口",
+      "description": "团队成员可在配置的时间窗口内（如工作开始时）异步提交站会回答，Bot在指定时间汇总发布",
+      "rule_type": "data_integrity",
+      "condition": "用户提交站会回答的时间不在配置的时间窗口内",
+      "expected_behavior": "Bot拒绝提交，提示用户在有效时间窗口内回答",
+      "related_features": [
+        "standup/config",
+        "standup/report"
+      ]
+    },
+    {
+      "id": "rule-004",
+      "name": "PM仪表盘数据访问权限",
+      "description": "仅团队负责人/工程经理角色可访问PM仪表盘（含概览、团队健康度、阻塞项管理）",
+      "rule_type": "authorization",
+      "condition": "非团队负责人/工程经理角色用户尝试访问PM仪表盘",
+      "expected_behavior": "拒绝访问，返回权限不足提示",
+      "related_features": [
+        "dashboard/overview",
+        "dashboard/team-health",
+        "dashboard/blockers"
+      ]
+    },
+    {
+      "id": "rule-005",
+      "name": "阻塞项状态管理",
+      "description": "阻塞项状态只能由报告人或有权限的管理员更新（如待解决、处理中、已解决）",
+      "rule_type": "authorization",
+      "condition": "非报告人或管理员尝试更新阻塞项状态",
+      "expected_behavior": "拒绝操作，提示无权限",
+      "related_features": [
+        "dashboard/blockers"
+      ]
+    },
+    {
+      "id": "rule-006",
+      "name": "免费版功能限制",
+      "description": "免费版仅支持基础异步站会功能，PM仪表盘为付费版专属功能",
+      "rule_type": "authorization",
+      "condition": "免费版团队用户尝试访问PM仪表盘",
+      "expected_behavior": "提示升级付费计划以解锁该功能",
+      "related_features": [
+        "dashboard/overview",
+        "team/billing"
+      ]
+    }
+  ]
+}

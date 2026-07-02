@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f5f7fa;
+  color: #303133;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.stage-indicator {
+  display: flex;
+  gap: 0;
+  align-items: center;
+}
+
+.stage-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #909399;
+  background: #f0f2f5;
+  transition: all 0.3s;
+}
+
+.stage-step.active {
+  color: #2563eb;
+  background: #eff6ff;
+  font-weight: 600;
+}
+
+.stage-step.completed {
+  color: #16a34a;
+  background: #f0fdf4;
+}
+
+.stage-connector {
+  width: 24px;
+  height: 2px;
+  background: #dcdfe6;
+  margin: 0 -4px;
+}
+
+.stage-connector.completed {
+  background: #16a34a;
+}
+
+.prototype-preview {
+  width: 100%;
+  height: 600px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+}
+
+.prototype-preview iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
