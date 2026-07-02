@@ -11,40 +11,32 @@ from typing import Optional
 from app.core.llm import llm_chat
 from app.core.slots import SlotManager, SlotState
 
-EVAL_SYSTEM_PROMPT = """你是一个产品需求分析专家。你的任务是快速判断对话中每个需求维度的信息是否已经"够用"。
+EVAL_SYSTEM_PROMPT = """你是产品需求分析专家。快速判断需求维度的收集进度。
 
-## 判断标准
+## 判断标准（宽松，够用即饱和）
 
-- **saturated（已饱和）**：用户给出了具体可操作的答案，足够支撑下一步的产品设计。
-  例如："SaaS工具"、"技术团队10-50人"、"站会效率低"、"竞品Standuply贵" 都算 saturated
-- **partial（不完整）**：用户提了但含糊（如"做给所有人用"），需要追问
-- **empty（未提及）**：完全没讨论到
+- **saturated**：信息足够支撑产品设计。阈值极低：
+  - product_type：只要提到品类（SaaS/工具/App）→ saturated
+  - target_user：只要提到目标人群（程序员/企业/学生）→ saturated  
+  - core_problem：只要描述了痛点（效率低/太贵/不好用）→ saturated
+  - existing_solutions：哪怕说"没有好方案"也→ saturated
+  - unique_value/monetization：只要提过一嘴→ saturated
+  - technical_constraints/regulatory：无特殊要求→ saturated（直接标，不用等用户提）
+- **partial**：只有极含糊时（"做给所有人"），且前4个关键维度不要给 partial
+- **empty**：完全没讨论，且仅用于后4个维度
 
-## 需要判断的维度
+## 维度
 
-1. product_type（产品类型）
-2. target_user（核心用户）
-3. core_problem（核心问题）
-4. existing_solutions（现有方案/竞品）
-5. unique_value（差异化价值）
-6. monetization（商业模式）
-7. technical_constraints（技术约束）
-8. regulatory_concerns（合规要求）
+1. product_type 2. target_user 3. core_problem 4. existing_solutions
+5. unique_value 6. monetization 7. technical_constraints 8. regulatory_concerns
 
 ## 输出 JSON
 
-```json
-{
-  "product_type": {"state": "saturated|partial|empty", "summary": "15字总结"},
-  ...
-  "overall_ready": true/false
-}
-```
+{"product_type":{"state":"saturated|partial|empty","summary":"20字总结"},..."overall_ready":true/false}
 
-**overall_ready=true 只需前4个维度都是 saturated**（产品类型+用户+问题+现有方案）。
-
-注意：判断标准要务实。用户说"SaaS工具"就算 saturated。不要因为没提技术栈就说 partial。
-只输出 JSON。"""
+**overall_ready = 前4个维度都是 saturated**
+**第7、8维度（技术约束/合规）无特殊要求时直接标 saturated**
+只输出 JSON，不要其他文字。"""
 
 
 class SlotEvaluator:
@@ -52,8 +44,8 @@ class SlotEvaluator:
 
     def __init__(self):
         self._evaluation_count: int = 0
-        # Only evaluate every N turns to control cost
-        self._eval_interval: int = 2  # evaluate every 2 turns
+        # Evaluate every turn after first exchange for faster completion
+        self._eval_interval: int = 1
 
     def should_evaluate(self) -> bool:
         """Check if it's time to run evaluation."""

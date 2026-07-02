@@ -10,26 +10,20 @@ from app.core.llm import llm_chat
 from app.core.slots import REQUIREMENT_SLOTS, SlotManager, SlotState
 from app.core.slot_evaluator import SlotEvaluator
 
-INQUIRY_SYSTEM_PROMPT = """你是一个专业的产品经理 AI 助手，你的任务是通过对话帮助用户清晰定义他们的产品想法。
+INQUIRY_SYSTEM_PROMPT = """你是产品经理 AI 助手，通过对话帮用户定义产品想法。
 
-核心原则：
-1. **主动引导**：你是对话的主导者，每次回复后必须主动追问一个关键问题
-2. **逐个深入**：每次只追一个问题，不要一次抛多个
-3. **自然过渡**：追问要结合对话上下文自然引出，不要生硬切换话题
-4. **避免重复**：已经充分讨论的维度不要回头再问
-5. **保持对话感**：你不是在填表，你是在和用户聊天，但要专业且有深度
-6. **短回复**：每次回复控制在 80-150 字，问题清晰即可
+原则：
+1. 每次只问一个问题，自然过渡，不跳话题
+2. 回复短（50-100字），像聊天不是填表
+3. 已讨论的维度不要回头问
+4. 先确认产品做什么、给谁用、解决什么问题，再深入细节
 
-你需要收集的关键信息：
-- 产品类型：SaaS/B2B/消费者工具/内容平台？
-- 核心用户：谁会使用？典型特征？
-- 核心问题：解决什么痛点？现有方案哪里不好？
-- 现有解决方案：用户现在怎么解决的？竞品有哪些？
-- 差异化价值：你的方案有什么不同？
-- 商业模式：如何盈利？
+需收集的信息：
+- 产品类型 → 核心用户 → 核心问题 → 现有方案（优先级最高）
+- 差异化价值 → 商业模式（次要）
+- 技术约束 → 合规（仅当用户主动提及时讨论）
 
-每次对话开始时，先确认产品的初步想法，然后选择最关键、用户还没说清楚的维度开始追问。
-"""
+首次对话：简短欢迎 + 确认产品想法（一句话），然后自然追问一个关键问题。"""
 
 
 class InquiryEngine:
@@ -78,18 +72,15 @@ class InquiryEngine:
 
     def _build_slot_context(self) -> str:
         """Build a context message describing current slot states."""
-        lines = ["[内部状态] 当前需求维度收集进度："]
+        lines = ["[需求收集进度]"]
         for key, slot in self.slot_manager.slots.items():
             state_emoji = {
                 SlotState.EMPTY: "⬜",
                 SlotState.PARTIAL: "🟡",
                 SlotState.SATURATED: "🟢",
             }
-            lines.append(
-                f"  {state_emoji.get(slot.state, '❓')} {slot.label} "
-                f"({slot.state.value}): {slot.value or '尚未收集'}"
-            )
-        lines.append("注意：🟢 表示信息已经充分，不要再追问。🟡 和 ⬜ 表示还需要收集。")
+            lines.append(f"  {state_emoji.get(slot.state, '❓')} {slot.label}: {slot.value or '(空)'}")
+        lines.append("🟢=已充分 (勿追问) | 🟡⬜=需收集")
         return "\n".join(lines)
 
     def _next_question_hint(self, slot) -> str:
@@ -112,6 +103,7 @@ class InquiryEngine:
 
         # Run LLM-based slot evaluation every N turns
         if self.evaluator.should_evaluate():
+            self.slot_manager.auto_saturate_conditionals()
             await self.evaluator.evaluate(
                 self.conversation_history,
                 self.slot_manager,

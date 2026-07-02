@@ -96,6 +96,30 @@ class SlotManager:
         """All REQUIRED slots are saturated."""
         return len(self.get_unsatisfied_required()) == 0
 
+    def auto_saturate_conditionals(self):
+        """Mark CONDITIONAL slots as saturated if trigger not met.
+        
+        If a conditional slot has no trigger or its trigger hasn't been
+        mentioned in any slot value, we can skip it.
+        """
+        all_values = " ".join(s.value for s in self.slots.values()).lower()
+        for slot in self.slots.values():
+            if slot.priority != SlotPriority.CONDITIONAL:
+                continue
+            if slot.state != SlotState.EMPTY:
+                continue
+            # Auto-saturate if no trigger keyword found
+            if slot.trigger_condition:
+                # Check if trigger is met by any conversation content
+                keywords = {
+                    "technical_constraints": ["技术", "架构", "性能", "安全", "部署"],
+                    "regulatory_concerns": ["合规", "法规", "数据", "金融", "医疗", "隐私"],
+                }
+                trigger_words = keywords.get(slot.key, [])
+                if not any(w in all_values for w in trigger_words):
+                    slot.state = SlotState.SATURATED
+                    slot.value = "无特殊要求"
+
     @property
     def fully_saturated(self) -> bool:
         """All slots are saturated."""
