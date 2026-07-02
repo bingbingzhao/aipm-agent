@@ -37,6 +37,13 @@
             <span>正在分析产品思路...</span>
           </div>
           <el-empty v-else description="完成需求卡片后自动生成" />
+
+          <div v-if="thinkingContent" class="stage-actions">
+            <el-button type="primary" :loading="advancing" @click="handleAdvance">
+              <el-icon><Right /></el-icon>
+              继续分析 → 产品结构
+            </el-button>
+          </div>
         </div>
 
         <!-- Stage ③: Product Structure -->
@@ -271,6 +278,7 @@ const projectId = props.id
 const store = useProjectStore()
 const project = ref<Project | null>(null)
 const regressing = ref(false)
+const advancing = ref(false)
 const STAGE_LABELS_MAP: Record<string, string> = {
   idea: '想法捕获', thinking: '产品思路', structure: '产品结构',
   prototype: '原型', prd: 'PRD', delivery: '交付',
@@ -360,6 +368,27 @@ async function handleRegress() {
     ElMessage.error(e.message || '回退失败')
   } finally {
     regressing.value = false
+  }
+}
+
+async function handleAdvance() {
+  advancing.value = true
+  thinkingLoading.value = true
+  try {
+    const result = await apiClient.post(`/api/pipeline/advance/${projectId}`, {})
+    pipelineStage.value = 'structure'
+    structureData.value = result.structure
+    if (result.thinking_report) {
+      thinkingContent.value = result.thinking_report
+    }
+    if (project.value) project.value.stage = 'structure'
+    thinkingLoading.value = false
+    ElMessage.success('产品结构分析完成！')
+  } catch (e: any) {
+    ElMessage.error(e.message || '分析失败')
+    thinkingLoading.value = false
+  } finally {
+    advancing.value = false
   }
 }
 

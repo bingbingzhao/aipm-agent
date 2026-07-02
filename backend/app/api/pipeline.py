@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.services.stage_pipeline import (
     advance_to_thinking,
+    advance_to_structure,
     advance_to_prototype,
     advance_to_prd,
     advance_to_delivery,
@@ -43,10 +44,18 @@ async def advance_stage(project_id: str) -> dict:
         }
 
     if project.stage == ProjectStage.THINKING:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Stage '{project.stage}' auto-advances. No manual action needed."
-        )
+        # When regressed to thinking, allow manual advance to structure
+        outputs = project.stage_outputs or {}
+        thinking_data = outputs.get("thinking", {})
+        thinking_report = thinking_data.get("report", "")
+        requirement_card = project.requirement_card or {}
+        result = await advance_to_structure(project_id, thinking_report, requirement_card)
+        return {
+            "status": "ok",
+            "project_id": project_id,
+            "thinking_report": thinking_report,
+            **result,
+        }
 
     if project.stage == ProjectStage.STRUCTURE:
         result = await advance_to_prototype(project_id)
