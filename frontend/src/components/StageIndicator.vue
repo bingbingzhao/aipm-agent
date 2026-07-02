@@ -21,7 +21,7 @@
 <script setup lang="ts">
 import { STAGE_LABELS } from '@/types'
 
-defineProps<{
+const props = defineProps<{
   currentStage: string
 }>()
 
@@ -47,10 +47,6 @@ function stageClass(stageKey: string) {
   if (stageCompleted(stageKey)) return 'stage-step completed'
   return 'stage-step'
 }
-</script>
-
-<script lang="ts">
-const props = defineProps<{ currentStage: string }>()
 </script>
 
 <style scoped>
