@@ -119,7 +119,7 @@ class InquiryEngine:
         return {
             "reply": reply,
             "stage_complete": saturated,
-            "requirement_card": self.slot_manager.requirement_card if saturated else None,
+            "requirement_card": self.slot_manager.requirement_card,
             "next_slot": (
                 self.slot_manager.get_next_to_ask().label
                 if not saturated else None

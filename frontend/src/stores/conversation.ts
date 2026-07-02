@@ -25,6 +25,7 @@ export const useConversationStore = defineStore('conversation', () => {
           role: data.role,
           content: data.content,
           stage_complete: data.stage_complete,
+          stage_ready: data.stage_ready,
           requirement_card: data.requirement_card,
           stage_transition: data.stage_transition,
         } as any)

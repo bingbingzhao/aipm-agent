@@ -18,6 +18,7 @@
           :project-id="projectId"
           :project="project"
           @stage-transition="onStageTransition"
+          @card-update="onCardUpdate"
         />
       </div>
 
@@ -234,12 +235,31 @@
           <el-empty v-else description="完成 PRD 后自动生成" />
         </div>
 
-        <!-- Stage ①: Idea placeholder -->
+        <!-- Stage ①: Idea -->
         <div v-else class="output-panel">
           <h3>💡 需求卡片</h3>
-          <div class="stage-hint">
+          <div v-if="currentRequirementCard" class="requirement-card">
+            <div
+              v-for="(card, key) in currentRequirementCard"
+              :key="key"
+              :class="['card-slot', card.state]"
+            >
+              <div class="card-slot-header">
+                <span class="card-slot-label">{{ card.label }}</span>
+                <el-tag
+                  :type="card.state === 'saturated' ? 'success' : card.state === 'partial' ? 'warning' : 'info'"
+                  size="small"
+                >
+                  {{ card.state === 'saturated' ? '✓' : card.state === 'partial' ? '…' : '○' }}
+                </el-tag>
+              </div>
+              <div v-if="card.value" class="card-slot-value">{{ card.value }}</div>
+              <div v-else class="card-slot-empty">等待补充...</div>
+            </div>
+          </div>
+          <div v-else class="stage-hint">
             <p>在左侧对话中描述你的产品想法。</p>
-            <p>AI 会引导你完成需求梳理，然后自动生成产品思路分析。</p>
+            <p>AI 会引导你完成需求梳理，确认后生成产品思路分析。</p>
           </div>
         </div>
       </div>
@@ -296,6 +316,7 @@ const prdLoading = ref(false)
 const deliveryLoading = ref(false)
 const prdContent = ref('')
 const deliveryData = ref<any>(null)
+const currentRequirementCard = ref<Record<string, any> | null>(null)
 const showFeedback = ref(false)
 const feedbackText = ref('')
 
@@ -318,6 +339,9 @@ onMounted(async () => {
   try {
     const state = await apiClient.get(`/api/pipeline/state/${projectId}`)
     pipelineStage.value = state.stage
+    if (state.requirement_card) {
+      currentRequirementCard.value = state.requirement_card
+    }
     if (state.thinking_report) {
       thinkingContent.value = state.thinking_report
     }
@@ -450,6 +474,10 @@ function onStageTransition(data: { stage: string; thinkingReport?: string; struc
     structureData.value = data.structure
   }
   project.value && (project.value.stage = data.stage)
+}
+
+function onCardUpdate(data: Record<string, any>) {
+  currentRequirementCard.value = data
 }
 
 async function generatePrototype() {
@@ -634,6 +662,56 @@ async function generateDelivery() {
   text-align: center;
   color: #909399;
   line-height: 1.8;
+}
+
+.requirement-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-slot {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 14px;
+  border-left: 3px solid #e4e7ed;
+  transition: border-color 0.3s;
+}
+
+.card-slot.saturated {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.card-slot.partial {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.card-slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-slot-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.card-slot-value {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.card-slot-empty {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #c0c4cc;
+  font-style: italic;
 }
 
 .structure-content {
