@@ -1,17 +1,20 @@
 """Conversation WebSocket endpoint.
 
-from __future__ import annotations
-
 Real-time chat for the inquiry engine (Stage ①).
-Auto-transitions to Stage ② when requirement card is complete.
+User confirms when ready → advances to Stage ②.
 """
+
+from __future__ import annotations
 
 from typing import Optional, Tuple
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
 from app.core.db import async_session
-from app.models.project import Project, Conversation, ProjectStage
+from app.models.project import (
+    Project, Conversation, RequirementSlot, ProjectStage,
+    ThinkingReport,
+)
 from app.services.inquiry_engine import InquiryEngine
 from app.services.stage_pipeline import (
     advance_to_thinking,
@@ -23,20 +26,29 @@ from app.services.stage_pipeline import (
 router = APIRouter()
 
 
+def _sync_slots(project_id: str, requirement_card: dict):
+    """Convert requirement_card dict to RequirementSlot rows for bulk upsert."""
+    slots = []
+    for key, data in requirement_card.items():
+        slots.append(RequirementSlot(
+            project_id=project_id,
+            key=key,
+            label=data.get("label", key),
+            value=data.get("value", ""),
+            state=data.get("state", "empty"),
+        ))
+    return slots
+
+
 async def _get_or_create_engine(
     project_id: str,
     db,
 ) -> Tuple[InquiryEngine, Optional[Project]]:
-    """Get existing engine or create from project + history.
-
-    Returns (engine, project). If project is already past Stage ①,
-    engine won't be created (returns None for engine, project).
-    """
+    """Get existing engine or create from project + history."""
     cached = get_engine(project_id)
     if cached:
         return cached, None
 
-    # Load project
     result = await db.execute(
         select(Project).where(Project.id == project_id)
     )
@@ -44,22 +56,23 @@ async def _get_or_create_engine(
     if not project:
         raise ValueError("Project not found")
 
-    # If already past idea stage, don't create new inquiry engine
     if project.stage != ProjectStage.IDEA:
         return None, project
 
     engine = InquiryEngine(initial_idea=project.description)
 
-    # Restore slot states from existing requirement card
-    if project.requirement_card:
-        for key, data in project.requirement_card.items():
-            from app.core.slots import SlotState
-            state_str = data.get("state", "empty")
-            try:
-                state = SlotState(state_str)
-                engine.slot_manager.update_slot(key, data.get("value", ""), state)
-            except ValueError:
-                pass
+    # Restore slot states from normalized RequirementSlot rows
+    slots_result = await db.execute(
+        select(RequirementSlot)
+        .where(RequirementSlot.project_id == project_id)
+    )
+    for slot in slots_result.scalars():
+        from app.core.slots import SlotState
+        try:
+            state = SlotState(slot.state)
+            engine.slot_manager.update_slot(slot.key, slot.value, state)
+        except ValueError:
+            pass
 
     # Load conversation history
     history_result = await db.execute(
@@ -93,29 +106,31 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
                 await websocket.close()
                 return
 
-            # If project is already past Stage ①, redirect
+            # If project is past Stage ①, send current state and close
             if engine is None and project is not None:
-                outputs = project.stage_outputs or {}
-                thinking = outputs.get("thinking", {})
-                proto = outputs.get("prototype", {})
+                # Load thinking report
+                think_result = await db.execute(
+                    select(ThinkingReport)
+                    .where(ThinkingReport.project_id == project_id)
+                    .order_by(ThinkingReport.version.desc())
+                    .limit(1)
+                )
+                think = think_result.scalar_one_or_none()
 
                 await websocket.send_json({
                     "type": "stage_state",
                     "stage": project.stage,
-                    "thinking_report": thinking.get("report"),
-                    "prototype_html": proto.get("html"),
-                    "validation": proto.get("validation"),
+                    "thinking_report": think.content if think else None,
                 })
                 await websocket.close()
                 return
 
-            # Send welcome if first message
+            # Send welcome
             if len(engine.conversation_history) <= 1:
-                welcome = "嗨！说说你想做什么产品？我可以帮你理清思路。"
                 await websocket.send_json({
                     "type": "message",
                     "role": "assistant",
-                    "content": welcome,
+                    "content": "嗨！说说你想做什么产品？我可以帮你理清思路。",
                     "stage": ProjectStage.IDEA,
                     "stage_complete": False,
                 })
@@ -128,30 +143,34 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
                     continue
 
                 # Save user message
-                conv = Conversation(
+                db.add(Conversation(
                     project_id=project_id,
                     role="user",
                     content=user_message,
-                )
-                db.add(conv)
+                ))
 
                 # Process with inquiry engine
                 result = await engine.chat(user_message)
 
                 # Save assistant message
-                conv_assistant = Conversation(
+                db.add(Conversation(
                     project_id=project_id,
                     role="assistant",
                     content=result["reply"],
-                )
-                db.add(conv_assistant)
-                await db.commit()
+                ))
 
-                # Persist requirement_card so it survives page refresh
+                # Persist requirement slots to normalized table
                 if result.get("requirement_card"):
-                    project.requirement_card = result["requirement_card"]
-                    db.add(project)
-                    await db.commit()
+                    # Delete old slots and insert new ones
+                    await db.execute(
+                        RequirementSlot.__table__.delete().where(
+                            RequirementSlot.project_id == project_id
+                        )
+                    )
+                    for slot in _sync_slots(project_id, result["requirement_card"]):
+                        db.add(slot)
+
+                await db.commit()
 
                 response = {
                     "type": "message",
@@ -165,15 +184,9 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
 
                 # Stage ① ready → tell user they can confirm
                 if result["stage_complete"] and result.get("requirement_card"):
-                    # Persist final requirement card
-                    project.requirement_card = result["requirement_card"]
-                    db.add(project)
-                    await db.commit()
-
                     response["stage_ready"] = True
-                    response["requirement_card"] = result["requirement_card"]
                     await websocket.send_json(response)
-                    continue  # Keep chat loop open; user confirms manually
+                    continue
 
                 await websocket.send_json(response)
 
@@ -190,37 +203,3 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
             pass
     finally:
         remove_engine(project_id)
-
-
-async def _run_pipeline_and_notify(websocket, project_id: str, requirement_card: dict):
-    """Background task: run thinking+structure pipeline, send results via WS."""
-    import logging
-    logger = logging.getLogger(__name__)
-    try:
-        # Send progress update
-        await websocket.send_json({
-            "type": "progress",
-            "stage": "thinking",
-            "content": "正在分析产品思路...",
-        })
-
-        pipeline_result = await advance_to_thinking(project_id, requirement_card)
-
-        await websocket.send_json({
-            "type": "stage_transition",
-            "stage": pipeline_result.get("new_stage", ProjectStage.STRUCTURE),
-            "thinking_report": pipeline_result.get("thinking_report"),
-            "structure": pipeline_result.get("structure"),
-        })
-        logger.info(f"Pipeline complete for project {project_id[:8]}")
-    except Exception as e:
-        logger.error(f"Pipeline failed: {e}")
-        import traceback
-        traceback.print_exc()
-        try:
-            await websocket.send_json({
-                "type": "error",
-                "content": f"产品分析生成失败: {str(e)[:200]}",
-            })
-        except Exception:
-            pass

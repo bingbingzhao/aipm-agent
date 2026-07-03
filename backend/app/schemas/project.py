@@ -17,6 +17,7 @@ class ProjectResponse(BaseModel):
     description: str
     stage: str
     status: str
+    requirement_card: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 
@@ -27,7 +28,16 @@ class ProjectUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     stage: Optional[str] = None
-    requirement_card: Optional[dict] = None
+
+
+class RequirementSlotResponse(BaseModel):
+    key: str
+    label: str
+    value: str
+    state: str
+    priority: str
+
+    model_config = {"from_attributes": True}
 
 
 class ConversationCreate(BaseModel):

@@ -1,10 +1,7 @@
-"""Stage Pipeline Orchestrator — 串联 ①→②→③→④ 管线。
+"""Stage Pipeline Orchestrator — 串联 ①→②→③→④→⑤→⑥ 管线.
 
-Manages automatic transitions between stages:
-- Stage ① (idea) complete → auto Stage ② (thinking) → auto Stage ③ (structure)
-- Stage ③ (structure) complete → user triggers Stage ④ (prototype)
-
-Stores all outputs in Project.stage_outputs JSON field.
+Each stage transitions manually (user confirms), storing outputs in
+normalized relational tables instead of a single JSON blob.
 """
 
 from __future__ import annotations
@@ -15,7 +12,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import async_session
-from app.models.project import Project, ProjectStage
+from app.models.project import (
+    Project, ProjectStage, RequirementSlot,
+    ThinkingReport, ProductStructure,
+    Prototype, PRD, DeliveryPlan,
+    DeliveryEpic, DeliveryStory, DeliveryTask, DeliverySprint,
+)
 from app.services.inquiry_engine import InquiryEngine
 from app.services.product_thinking import ProductThinking
 from app.services.product_structure import ProductStructureGenerator
@@ -53,42 +55,37 @@ async def get_project(project_id: str) -> Optional[Project]:
         return result.scalar_one_or_none()
 
 
-async def save_stage_output(
-    project_id: str,
-    stage: str,
-    output: dict,
-):
-    """Save a stage's output to the project."""
-    async with async_session() as db:
-        result = await db.execute(
-            select(Project).where(Project.id == project_id)
-        )
-        project = result.scalar_one_or_none()
-        if not project:
-            return
-
-        outputs = dict(project.stage_outputs or {})
-        outputs[stage] = output
-
-        project.stage_outputs = outputs
-        await db.commit()
+def _build_requirement_card_from_slots(slots: list[RequirementSlot]) -> dict:
+    """Convert normalized slots to dict format for AI prompts."""
+    return {
+        s.key: {"label": s.label, "value": s.value, "state": s.state}
+        for s in slots
+    }
 
 
 async def advance_to_thinking(
     project_id: str,
     requirement_card: dict,
 ) -> dict:
-    """Stage ① complete → auto-generate Stage ② + auto-chain to Stage ③.
-
-    Called when the inquiry engine's requirement card is saturated.
-    """
-    # Save requirement card
-    await save_stage_output(project_id, "idea", {
-        "requirement_card": requirement_card,
-    })
-
-    # Update stage
+    """Stage ① → ②: Generate thinking report from requirement card."""
+    # Save requirement slots to DB
     async with async_session() as db:
+        # Delete old slots
+        await db.execute(
+            RequirementSlot.__table__.delete().where(
+                RequirementSlot.project_id == project_id
+            )
+        )
+        for key, data in requirement_card.items():
+            db.add(RequirementSlot(
+                project_id=project_id,
+                key=key,
+                label=data.get("label", key),
+                value=data.get("value", ""),
+                state=data.get("state", "empty"),
+            ))
+
+        # Update project stage
         result = await db.execute(
             select(Project).where(Project.id == project_id)
         )
@@ -97,12 +94,19 @@ async def advance_to_thinking(
             return {"error": "Project not found"}
 
         project.stage = ProjectStage.THINKING
-        project.requirement_card = requirement_card
         await db.commit()
 
-    # Generate thinking report and stop — user confirms next stage manually
+    # Generate thinking report
     report = await _thinking.analyze(requirement_card)
-    await save_stage_output(project_id, "thinking", {"report": report})
+
+    # Save thinking report
+    async with async_session() as db:
+        db.add(ThinkingReport(
+            project_id=project_id,
+            content=report,
+            version=1,
+        ))
+        await db.commit()
 
     return {
         "new_stage": ProjectStage.THINKING,
@@ -115,8 +119,7 @@ async def advance_to_structure(
     thinking_report: str,
     requirement_card: dict,
 ) -> dict:
-    """Stage ② complete → auto-generate Stage ③ product structure."""
-    # Update stage
+    """Stage ② → ③: Generate product structure from thinking report."""
     async with async_session() as db:
         result = await db.execute(
             select(Project).where(Project.id == project_id)
@@ -130,7 +133,15 @@ async def advance_to_structure(
 
     # Generate structure
     structure = await _structure.generate(thinking_report, requirement_card)
-    await save_stage_output(project_id, "structure", {"data": structure})
+
+    # Save structure
+    async with async_session() as db:
+        db.add(ProductStructure(
+            project_id=project_id,
+            data=structure,
+            version=1,
+        ))
+        await db.commit()
 
     return {
         "new_stage": ProjectStage.STRUCTURE,
@@ -138,10 +149,8 @@ async def advance_to_structure(
     }
 
 
-async def advance_to_prototype(
-    project_id: str,
-) -> dict:
-    """Stage ③ complete → generate Stage ④ prototype."""
+async def advance_to_prototype(project_id: str) -> dict:
+    """Stage ③ → ④: Generate prototype HTML."""
     async with async_session() as db:
         result = await db.execute(
             select(Project).where(Project.id == project_id)
@@ -150,29 +159,50 @@ async def advance_to_prototype(
         if not project:
             return {"error": "Project not found"}
 
-        outputs = dict(project.stage_outputs or {})
-        thinking_data = outputs.get("thinking", {})
-        structure_data = outputs.get("structure", {})
-        thinking_report = thinking_data.get("report", "")
-        structure_info = structure_data.get("data", {})
-        requirement_card = project.requirement_card or {}
+        # Load previous stage data
+        think_result = await db.execute(
+            select(ThinkingReport)
+            .where(ThinkingReport.project_id == project_id)
+            .order_by(ThinkingReport.version.desc())
+            .limit(1)
+        )
+        think = think_result.scalar_one_or_none()
 
-    if not thinking_report:
-        return {"error": "No thinking report found."}
+        struct_result = await db.execute(
+            select(ProductStructure)
+            .where(ProductStructure.project_id == project_id)
+            .order_by(ProductStructure.version.desc())
+            .limit(1)
+        )
+        struct = struct_result.scalar_one_or_none()
+
+        slots_result = await db.execute(
+            select(RequirementSlot)
+            .where(RequirementSlot.project_id == project_id)
+        )
+        slots = slots_result.scalars().all()
+
+    thinking_report = think.content if think else ""
+    structure_data = struct.data if struct else {}
+    requirement_card = _build_requirement_card_from_slots(slots)
 
     description = _build_prototype_prompt(
-        thinking_report, requirement_card, structure_info
+        thinking_report, requirement_card, structure_data
     )
 
     html = await _proto_gen.generate(description)
     validation = _proto_val.validate(html)
 
-    await save_stage_output(project_id, "prototype", {
-        "html": html,
-        "validation": validation.to_dict(),
-    })
-
+    # Save prototype
     async with async_session() as db:
+        db.add(Prototype(
+            project_id=project_id,
+            html=html,
+            validation_score=validation.score if hasattr(validation, 'score') else None,
+            validation_detail=validation.to_dict(),
+            version=1,
+        ))
+
         result = await db.execute(
             select(Project).where(Project.id == project_id)
         )
@@ -188,33 +218,34 @@ async def advance_to_prototype(
     }
 
 
-async def iterate_prototype(
-    project_id: str,
-    feedback: str,
-) -> dict:
+async def iterate_prototype(project_id: str, feedback: str) -> dict:
     """Iterate on an existing prototype based on user feedback."""
     async with async_session() as db:
-        result = await db.execute(
-            select(Project).where(Project.id == project_id)
+        proto_result = await db.execute(
+            select(Prototype)
+            .where(Prototype.project_id == project_id)
+            .order_by(Prototype.version.desc())
+            .limit(1)
         )
-        project = result.scalar_one_or_none()
-        if not project:
-            return {"error": "Project not found"}
+        proto = proto_result.scalar_one_or_none()
+        if not proto:
+            return {"error": "No prototype found. Generate one first."}
 
-        outputs = dict(project.stage_outputs or {})
-        proto_data = outputs.get("prototype", {})
-        current_html = proto_data.get("html", "")
-
-    if not current_html:
-        return {"error": "No prototype found. Generate one first."}
+        current_html = proto.html
 
     html = await _proto_gen.iterate(current_html, feedback)
     validation = _proto_val.validate(html)
 
-    await save_stage_output(project_id, "prototype", {
-        "html": html,
-        "validation": validation.to_dict(),
-    })
+    async with async_session() as db:
+        db.add(Prototype(
+            project_id=project_id,
+            html=html,
+            validation_score=validation.score if hasattr(validation, 'score') else None,
+            validation_detail=validation.to_dict(),
+            feedback=feedback,
+            version=proto.version + 1,
+        ))
+        await db.commit()
 
     return {
         "prototype_html": html,
@@ -236,7 +267,6 @@ def _build_prototype_prompt(
 
     report_summary = thinking_report[:800]
 
-    # Extract structure info
     structure_text = ""
     if structure_info and not structure_info.get("parse_error"):
         routes = structure_info.get("route_plan", [])
@@ -271,10 +301,8 @@ def _build_prototype_prompt(
     return prompt
 
 
-async def advance_to_prd(
-    project_id: str,
-) -> dict:
-    """Stage ④ complete → generate Stage ⑤ PRD."""
+async def advance_to_prd(project_id: str) -> dict:
+    """Stage ④ → ⑤: Generate PRD."""
     async with async_session() as db:
         result = await db.execute(
             select(Project).where(Project.id == project_id)
@@ -283,32 +311,48 @@ async def advance_to_prd(
         if not project:
             return {"error": "Project not found"}
 
-        outputs = dict(project.stage_outputs or {})
-        thinking_data = outputs.get("thinking", {})
-        structure_data = outputs.get("structure", {})
-        proto_data = outputs.get("prototype", {})
-        requirement_card = project.requirement_card or {}
+        # Load context
+        think_result = await db.execute(
+            select(ThinkingReport)
+            .where(ThinkingReport.project_id == project_id)
+            .order_by(ThinkingReport.version.desc())
+            .limit(1)
+        )
+        think = think_result.scalar_one_or_none()
 
-    thinking_report = thinking_data.get("report", "")
-    structure = structure_data.get("data", {})
-    proto_html = proto_data.get("html", "")
+        struct_result = await db.execute(
+            select(ProductStructure)
+            .where(ProductStructure.project_id == project_id)
+            .order_by(ProductStructure.version.desc())
+            .limit(1)
+        )
+        struct = struct_result.scalar_one_or_none()
 
-    if not thinking_report and not structure:
-        return {"error": "No previous stage data found. Complete earlier stages first."}
+        proto_result = await db.execute(
+            select(Prototype)
+            .where(Prototype.project_id == project_id)
+            .order_by(Prototype.version.desc())
+            .limit(1)
+        )
+        proto = proto_result.scalar_one_or_none()
 
-    # Generate PRD
+        slots_result = await db.execute(
+            select(RequirementSlot)
+            .where(RequirementSlot.project_id == project_id)
+        )
+        slots = slots_result.scalars().all()
+
+    requirement_card = _build_requirement_card_from_slots(slots)
     prd = await _prd_gen.generate(
         project_name=project.title,
         requirement_card=requirement_card,
-        thinking_report=thinking_report,
-        structure=structure,
-        prototype_html=proto_html,
+        thinking_report=think.content if think else "",
+        structure=struct.data if struct else {},
+        prototype_html=proto.html if proto else "",
     )
 
-    # Save
-    await save_stage_output(project_id, "prd", {"document": prd})
-
     async with async_session() as db:
+        db.add(PRD(project_id=project_id, content=prd, version=1))
         result = await db.execute(
             select(Project).where(Project.id == project_id)
         )
@@ -323,10 +367,8 @@ async def advance_to_prd(
     }
 
 
-async def advance_to_delivery(
-    project_id: str,
-) -> dict:
-    """Stage ⑤ complete → generate Stage ⑥ delivery plan."""
+async def advance_to_delivery(project_id: str) -> dict:
+    """Stage ⑤ → ⑥: Generate delivery plan."""
     async with async_session() as db:
         result = await db.execute(
             select(Project).where(Project.id == project_id)
@@ -335,21 +377,83 @@ async def advance_to_delivery(
         if not project:
             return {"error": "Project not found"}
 
-        outputs = dict(project.stage_outputs or {})
-        prd_data = outputs.get("prd", {})
-        structure_data = outputs.get("structure", {})
+        prd_result = await db.execute(
+            select(PRD)
+            .where(PRD.project_id == project_id)
+            .order_by(PRD.version.desc())
+            .limit(1)
+        )
+        prd = prd_result.scalar_one_or_none()
 
-    prd_doc = prd_data.get("document", "")
-    structure = structure_data.get("data", {})
+        struct_result = await db.execute(
+            select(ProductStructure)
+            .where(ProductStructure.project_id == project_id)
+            .order_by(ProductStructure.version.desc())
+            .limit(1)
+        )
+        struct = struct_result.scalar_one_or_none()
 
-    if not prd_doc:
+    if not prd:
         return {"error": "No PRD found. Complete Stage ⑤ first."}
 
-    delivery = await _delivery_gen.generate(prd_doc, structure)
+    delivery = await _delivery_gen.generate(
+        prd.content,
+        struct.data if struct else {},
+    )
 
-    await save_stage_output(project_id, "delivery", {"data": delivery})
-
+    # Save delivery plan with nested epics/stories/tasks/sprints
     async with async_session() as db:
+        plan = DeliveryPlan(
+            project_id=project_id,
+            total_weeks=delivery.get("total_estimate", {}).get("weeks"),
+            team_size=delivery.get("total_estimate", {}).get("team_size"),
+            total_story_points=delivery.get("total_estimate", {}).get("total_story_points"),
+        )
+        db.add(plan)
+        await db.flush()  # Get plan ID
+
+        # Epics with stories and tasks
+        for epic_data in delivery.get("epics", []):
+            epic = DeliveryEpic(
+                delivery_plan_id=plan.id,
+                name=epic_data.get("name", ""),
+                description=epic_data.get("description", ""),
+                order_index=epic_data.get("order", 0),
+            )
+            db.add(epic)
+            await db.flush()
+
+            for story_data in epic_data.get("stories", []):
+                story = DeliveryStory(
+                    epic_id=epic.id,
+                    name=story_data.get("name", ""),
+                    as_a=story_data.get("as_a", ""),
+                    i_want=story_data.get("i_want", ""),
+                    so_that=story_data.get("so_that", ""),
+                    story_points=story_data.get("story_points", 1),
+                    order_index=story_data.get("order", 0),
+                )
+                db.add(story)
+                await db.flush()
+
+                for task_data in story_data.get("tasks", []):
+                    db.add(DeliveryTask(
+                        story_id=story.id,
+                        name=task_data.get("name", ""),
+                        role=task_data.get("role", "fullstack"),
+                        estimate_hours=task_data.get("estimate_hours", 0),
+                    ))
+
+        # Sprints
+        for sprint_data in delivery.get("sprints", []):
+            db.add(DeliverySprint(
+                delivery_plan_id=plan.id,
+                name=sprint_data.get("name", ""),
+                goal=sprint_data.get("goal", ""),
+                duration_weeks=sprint_data.get("duration_weeks", 2),
+                total_points=sprint_data.get("total_points", 0),
+            ))
+
         result = await db.execute(
             select(Project).where(Project.id == project_id)
         )
