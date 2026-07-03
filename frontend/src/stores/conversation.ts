@@ -74,7 +74,7 @@ export const useConversationStore = defineStore('conversation', () => {
     ws?.close()
     ws = null
     messages.value = []
-    currentCard.value = null
+    // Don't clear currentCard — it's loaded from pipeline state on remount
   }
 
   async function loadHistory(projectId: string) {

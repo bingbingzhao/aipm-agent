@@ -147,6 +147,12 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
                 db.add(conv_assistant)
                 await db.commit()
 
+                # Persist requirement_card so it survives page refresh
+                if result.get("requirement_card"):
+                    project.requirement_card = result["requirement_card"]
+                    db.add(project)
+                    await db.commit()
+
                 response = {
                     "type": "message",
                     "role": "assistant",
@@ -159,6 +165,11 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
 
                 # Stage ① ready → tell user they can confirm
                 if result["stage_complete"] and result.get("requirement_card"):
+                    # Persist final requirement card
+                    project.requirement_card = result["requirement_card"]
+                    db.add(project)
+                    await db.commit()
+
                     response["stage_ready"] = True
                     response["requirement_card"] = result["requirement_card"]
                     await websocket.send_json(response)
