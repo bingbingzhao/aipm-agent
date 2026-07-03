@@ -5,6 +5,7 @@ import type { ChatMessage } from '@/types'
 
 export const useConversationStore = defineStore('conversation', () => {
   const messages = ref<ChatMessage[]>([])
+  const currentCard = ref<Record<string, any> | null>(null)
   const connected = ref(false)
   let ws: WebSocket | null = null
 
@@ -29,6 +30,10 @@ export const useConversationStore = defineStore('conversation', () => {
           requirement_card: data.requirement_card,
           stage_transition: data.stage_transition,
         } as any)
+        // Sync requirement card in real-time
+        if (data.requirement_card) {
+          currentCard.value = data.requirement_card
+        }
       } else if (data.type === 'progress') {
         // Background pipeline progress
         messages.value.push({
@@ -69,6 +74,7 @@ export const useConversationStore = defineStore('conversation', () => {
     ws?.close()
     ws = null
     messages.value = []
+    currentCard.value = null
   }
 
   async function loadHistory(projectId: string) {
@@ -83,5 +89,5 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  return { messages, connected, connect, send, disconnect, loadHistory }
+  return { messages, currentCard, connected, connect, send, disconnect, loadHistory }
 })

@@ -79,7 +79,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'stage-transition': [data: { stage: string; thinkingReport?: string; structure?: any }]
-  'card-update': [data: Record<string, any>]
 }>()
 
 const conversationStore = useConversationStore()
@@ -99,20 +98,16 @@ onUnmounted(() => {
   conversationStore.disconnect()
 })
 
-// Watch for stage transition messages
+// Watch for new messages and sync requirement card
 watch(
-  () => conversationStore.messages,
-  async (msgs) => {
+  () => conversationStore.messages.length,
+  async () => {
     await nextTick()
     scrollToBottom()
 
+    const msgs = conversationStore.messages
     const lastMsg = msgs[msgs.length - 1]
     if (!lastMsg) return
-
-    // Real-time requirement card sync
-    if (lastMsg.requirement_card) {
-      emit('card-update', lastMsg.requirement_card)
-    }
 
     // Handle stage_ready: show confirm button instead of auto-transition
     if (lastMsg.stage_ready && lastMsg.requirement_card) {
@@ -145,7 +140,7 @@ watch(
       stageReady.value = true
     }
   },
-  { deep: true }
+  { deep: false }
 )
 
 function handleSend() {

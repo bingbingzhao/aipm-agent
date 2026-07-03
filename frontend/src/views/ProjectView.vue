@@ -18,7 +18,6 @@
           :project-id="projectId"
           :project="project"
           @stage-transition="onStageTransition"
-          @card-update="onCardUpdate"
         />
       </div>
 
@@ -238,9 +237,9 @@
         <!-- Stage ①: Idea -->
         <div v-else class="output-panel">
           <h3>💡 需求卡片</h3>
-          <div v-if="currentRequirementCard" class="requirement-card">
+          <div v-if="conversationStore.currentCard" class="requirement-card">
             <div
-              v-for="(card, key) in currentRequirementCard"
+              v-for="(card, key) in conversationStore.currentCard"
               :key="key"
               :class="['card-slot', card.state]"
             >
@@ -289,6 +288,7 @@ import { ElMessage } from 'element-plus'
 import { useProjectStore } from '@/stores/project'
 import ChatPanel from '@/components/ChatPanel.vue'
 import StageIndicator from '@/components/StageIndicator.vue'
+import { useConversationStore } from '@/stores/conversation'
 import { apiClient } from '@/api/client'
 import type { Project } from '@/types'
 
@@ -296,6 +296,7 @@ const props = defineProps<{ id: string }>()
 const projectId = props.id
 
 const store = useProjectStore()
+const conversationStore = useConversationStore()
 const project = ref<Project | null>(null)
 const regressing = ref(false)
 const advancing = ref(false)
@@ -316,7 +317,6 @@ const prdLoading = ref(false)
 const deliveryLoading = ref(false)
 const prdContent = ref('')
 const deliveryData = ref<any>(null)
-const currentRequirementCard = ref<Record<string, any> | null>(null)
 const showFeedback = ref(false)
 const feedbackText = ref('')
 
@@ -340,7 +340,7 @@ onMounted(async () => {
     const state = await apiClient.get(`/api/pipeline/state/${projectId}`)
     pipelineStage.value = state.stage
     if (state.requirement_card) {
-      currentRequirementCard.value = state.requirement_card
+      conversationStore.currentCard = state.requirement_card
     }
     if (state.thinking_report) {
       thinkingContent.value = state.thinking_report
@@ -474,10 +474,6 @@ function onStageTransition(data: { stage: string; thinkingReport?: string; struc
     structureData.value = data.structure
   }
   project.value && (project.value.stage = data.stage)
-}
-
-function onCardUpdate(data: Record<string, any>) {
-  currentRequirementCard.value = data
 }
 
 async function generatePrototype() {
