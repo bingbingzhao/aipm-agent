@@ -59,7 +59,7 @@ async def _get_or_create_engine(
     if project.stage != ProjectStage.IDEA:
         return None, project
 
-    engine = InquiryEngine(initial_idea=project.description)
+    engine = InquiryEngine()
 
     # Restore slot states from normalized RequirementSlot rows
     slots_result = await db.execute(
@@ -80,10 +80,20 @@ async def _get_or_create_engine(
         .where(Conversation.project_id == project_id)
         .order_by(Conversation.created_at.asc())
     )
+    has_history = False
     for msg in history_result.scalars():
         engine.conversation_history.append({
             "role": msg.role,
             "content": msg.content,
+        })
+        has_history = True
+
+    # If no history yet, seed with project description as initial idea
+    if not has_history and project.description:
+        engine.initial_idea = project.description
+        engine.conversation_history.append({
+            "role": "user",
+            "content": f"我想做一个产品：{project.description}",
         })
 
     set_engine(project_id, engine)
@@ -125,17 +135,37 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
                 await websocket.close()
                 return
 
-            # Send welcome — personalized if initial idea exists
+            # First-time visit: seed conversation with initial idea if present
             if len(engine.conversation_history) <= 1:
-                idea_text = engine.initial_idea[:50] if engine.initial_idea else ""
+                idea_text = engine.initial_idea[:100] if engine.initial_idea else ""
+
                 if idea_text:
+                    # Save initial idea as first user message in DB
+                    first_msg = Conversation(
+                        project_id=project_id,
+                        role="user",
+                        content=f"我想做一个产品：{idea_text}",
+                    )
+                    db.add(first_msg)
+                    await db.commit()
+
+                    # Show it to the user
+                    await websocket.send_json({
+                        "type": "message",
+                        "role": "user",
+                        "content": f"我想做一个产品：{idea_text}",
+                        "stage": ProjectStage.IDEA,
+                        "stage_complete": False,
+                    })
+
                     welcome = f"{idea_text}——这个方向挺有意思的！先聊聊你具体想做成什么样的？"
                 else:
                     welcome = "嗨！说说你想做什么产品？我可以帮你理清思路。"
+
                 await websocket.send_json({
                     "type": "message",
                     "role": "assistant",
-                    "content": "嗨！说说你想做什么产品？我可以帮你理清思路。",
+                    "content": welcome,
                     "stage": ProjectStage.IDEA,
                     "stage_complete": False,
                 })
