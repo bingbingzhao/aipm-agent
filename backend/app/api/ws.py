@@ -125,8 +125,13 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
                 await websocket.close()
                 return
 
-            # Send welcome
+            # Send welcome — personalized if initial idea exists
             if len(engine.conversation_history) <= 1:
+                idea_text = engine.initial_idea[:50] if engine.initial_idea else ""
+                if idea_text:
+                    welcome = f"{idea_text}——这个方向挺有意思的！先聊聊你具体想做成什么样的？"
+                else:
+                    welcome = "嗨！说说你想做什么产品？我可以帮你理清思路。"
                 await websocket.send_json({
                     "type": "message",
                     "role": "assistant",
