@@ -9,7 +9,10 @@
     <div class="chat-messages" ref="messagesContainer">
       <!-- Stage ready confirmation bar -->
       <div v-if="stageReady" class="stage-ready-bar">
-        <span>✅ 需求信息已充足</span>
+        <div>
+          <div class="ready-title">✅ 需求信息已充足</div>
+          <div v-if="stageReadyHint" class="ready-hint">{{ stageReadyHint }}</div>
+        </div>
         <el-button type="primary" size="small" :loading="confirming" @click="handleConfirm">
           完成需求梳理，生成产品方案
         </el-button>
@@ -85,6 +88,7 @@ const conversationStore = useConversationStore()
 const inputText = ref('')
 const typing = ref(false)
 const stageReady = ref(false)
+const stageReadyHint = ref('')
 const confirming = ref(false)
 const messagesContainer = ref<HTMLElement>()
 
@@ -112,6 +116,7 @@ watch(
     // Handle stage_ready: show confirm button instead of auto-transition
     if (lastMsg.stage_ready && lastMsg.requirement_card) {
       stageReady.value = true
+      stageReadyHint.value = lastMsg.stage_ready_hint || '需求信息已充足'
       return
     }
 
@@ -219,15 +224,27 @@ function scrollToBottom() {
 
 .stage-ready-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 12px 14px;
   margin-bottom: 12px;
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
   border-radius: 8px;
-  font-size: 13px;
+  gap: 12px;
+}
+
+.ready-title {
+  font-size: 14px;
+  font-weight: 600;
   color: #16a34a;
+  margin-bottom: 2px;
+}
+
+.ready-hint {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
 }
 
 .message {

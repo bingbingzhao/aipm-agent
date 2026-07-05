@@ -182,9 +182,13 @@ async def websocket_chat(websocket: WebSocket, project_id: str):
                     "next_slot": result.get("next_slot"),
                 }
 
-                # Stage ① ready → tell user they can confirm
+                # Stage ① ready → tell user they can confirm (or keep chatting)
                 if result["stage_complete"] and result.get("requirement_card"):
                     response["stage_ready"] = True
+                    response["stage_ready_hint"] = (
+                        "需求信息差不多了！你可以点「完成需求梳理」生成产品方案，"
+                        "也可以继续补充更多细节。"
+                    )
                     await websocket.send_json(response)
                     continue
 
