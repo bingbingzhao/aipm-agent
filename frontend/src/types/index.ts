@@ -11,9 +11,13 @@ export interface Project {
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  type?: string
+  stage?: string
   stage_complete?: boolean
+  stage_ready?: boolean
+  stage_ready_hint?: string
   requirement_card?: Record<string, unknown>
-  stage_transition?: { from: string; to: string }
+  stage_transition?: { from: string; to: string; pending?: boolean }
   thinking_report?: string
   structure?: Record<string, unknown>
 }

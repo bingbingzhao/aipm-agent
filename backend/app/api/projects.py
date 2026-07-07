@@ -8,10 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
+from app.api.deps import get_current_user
 from app.models.project import (
     Project, ProjectStage, RequirementSlot,
     Conversation, ThinkingReport, ProductStructure,
-    Prototype, PRD, DeliveryPlan,
+    Prototype, PRD, DeliveryPlan, User,
 )
 from app.schemas.project import (
     ProjectCreate,
@@ -55,34 +56,62 @@ def _project_to_response(p, include_card=True) -> dict:
 
 
 @router.get("/")
-async def list_projects(db: AsyncSession = Depends(get_db)):
+async def list_projects(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     result = await db.execute(
         select(Project)
         .options(selectinload(Project.slots))
+        .where(Project.owner_id == current_user.id)
         .order_by(Project.updated_at.desc())
     )
     return [_project_to_response(p) for p in result.scalars().all()]
 
 
 @router.post("/", status_code=201)
-async def create_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)):
-    project = Project(title=data.title, description=data.description)
+async def create_project(
+    data: ProjectCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = Project(
+        title=data.title,
+        description=data.description,
+        owner_id=current_user.id,
+    )
     db.add(project)
     await db.commit()
     await db.refresh(project)
     return _project_to_response(project)
 
 
-@router.get("/{project_id}")
-async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Project)
-        .options(selectinload(Project.slots))
-        .where(Project.id == project_id)
-    )
+async def _get_owned_project(
+    project_id: str,
+    db: AsyncSession,
+    current_user: User,
+    load_slots: bool = False,
+) -> Project:
+    """Fetch a project and verify ownership. Raises 404 if not found or not owned."""
+    query = select(Project).where(Project.id == project_id)
+    if load_slots:
+        query = query.options(selectinload(Project.slots))
+    result = await db.execute(query)
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权访问此项目")
+    return project
+
+
+@router.get("/{project_id}")
+async def get_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = await _get_owned_project(project_id, db, current_user, load_slots=True)
     return _project_to_response(project)
 
 
@@ -91,13 +120,9 @@ async def update_project(
     project_id: str,
     data: ProjectUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
-        select(Project).where(Project.id == project_id)
-    )
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _get_owned_project(project_id, db, current_user)
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -109,14 +134,12 @@ async def update_project(
 
 
 @router.delete("/{project_id}", status_code=204)
-async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Project).where(Project.id == project_id)
-    )
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
+async def delete_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = await _get_owned_project(project_id, db, current_user)
     await db.delete(project)
     await db.commit()
 
@@ -128,16 +151,10 @@ STAGE_ORDER = ["idea", "thinking", "structure", "prototype", "prd", "delivery"]
 async def regress_project(
     project_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """回退项目到上一阶段，保留对话历史和需求卡片。"""
-    result = await db.execute(
-        select(Project)
-        .options(selectinload(Project.slots))
-        .where(Project.id == project_id)
-    )
-    project = result.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await _get_owned_project(project_id, db, current_user, load_slots=True)
 
     current_idx = STAGE_ORDER.index(project.stage) if project.stage in STAGE_ORDER else 0
     if current_idx == 0:
@@ -158,7 +175,12 @@ async def regress_project(
 # ═══ Requirement Slots API ═══
 
 @router.get("/{project_id}/slots", response_model=list[RequirementSlotResponse])
-async def get_project_slots(project_id: str, db: AsyncSession = Depends(get_db)):
+async def get_project_slots(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await _get_owned_project(project_id, db, current_user)
     result = await db.execute(
         select(RequirementSlot)
         .where(RequirementSlot.project_id == project_id)

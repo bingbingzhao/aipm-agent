@@ -11,7 +11,8 @@ export const useConversationStore = defineStore('conversation', () => {
 
   function connect(projectId: string) {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${location.host}/ws/${projectId}`
+    const token = localStorage.getItem('aipm_token') || ''
+    const wsUrl = `${protocol}//${location.host}/ws/${projectId}?token=${encodeURIComponent(token)}`
 
     ws = new WebSocket(wsUrl)
 
@@ -21,6 +22,15 @@ export const useConversationStore = defineStore('conversation', () => {
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
+      if (data.type === 'error') {
+        // Auth or permission error from WS
+        messages.value.push({
+          role: 'assistant',
+          content: `⚠️ ${data.content}`,
+          type: 'error',
+        } as any)
+        return
+      }
       if (data.type === 'message') {
         messages.value.push({
           role: data.role,

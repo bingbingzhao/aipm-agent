@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
+from app.api.deps import get_current_user
 from app.core.db import async_session
 from app.models.project import (
     Project, ProjectStage, RequirementSlot,
     ThinkingReport, ProductStructure,
     Prototype, PRD, DeliveryPlan,
     DeliveryEpic, DeliveryStory, DeliveryTask, DeliverySprint,
+    User,
 )
 from app.services.stage_pipeline import (
     advance_to_thinking,
@@ -25,12 +27,22 @@ from app.services.stage_pipeline import (
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
 
+def _check_owner(project, current_user: User):
+    """Raise 403 if project not owned by current user."""
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权访问此项目")
+
+
 @router.post("/advance/{project_id}")
-async def advance_stage(project_id: str) -> dict:
+async def advance_stage(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     """Advance project to the next stage."""
     project = await get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    _check_owner(project, current_user)
 
     if project.stage == ProjectStage.IDEA:
         async with async_session() as db:
@@ -105,8 +117,13 @@ async def advance_stage(project_id: str) -> dict:
 async def iterate_prototype_endpoint(
     project_id: str,
     feedback: str = "",
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     """Iterate on the current prototype based on feedback."""
+    project = await get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    _check_owner(project, current_user)
     if not feedback:
         raise HTTPException(status_code=400, detail="Feedback is required")
 
@@ -115,11 +132,15 @@ async def iterate_prototype_endpoint(
 
 
 @router.get("/state/{project_id}")
-async def get_pipeline_state(project_id: str) -> dict:
+async def get_pipeline_state(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     """Get the full pipeline state for a project."""
     project = await get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    _check_owner(project, current_user)
 
     async with async_session() as db:
         # Slots → requirement_card dict

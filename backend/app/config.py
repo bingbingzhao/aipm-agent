@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite+aiosqlite:///./aipm.db"
 
+    # Auth
+    jwt_secret: str = "CHANGE-ME-in-production-use-a-long-random-string"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
+
     # App
     app_env: str = "development"
     debug: bool = True

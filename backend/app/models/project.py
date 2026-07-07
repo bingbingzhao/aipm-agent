@@ -40,6 +40,32 @@ class SlotState:
     SATURATED = "saturated"
 
 
+# ═══ User ═══
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
+    )
+    username: Mapped[str] = mapped_column(String(100), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    projects: Mapped[list["Project"]] = relationship(
+        back_populates="owner", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return f"<User(id={self.id[:8]}, email={self.email})>"
+
+
 # ═══ Project ═══
 
 class Project(Base):
@@ -47,6 +73,9 @@ class Project(Base):
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
@@ -64,6 +93,7 @@ class Project(Base):
     )
 
     # Relations
+    owner: Mapped[Optional["User"]] = relationship(back_populates="projects")
     slots: Mapped[list["RequirementSlot"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )

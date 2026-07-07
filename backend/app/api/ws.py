@@ -101,11 +101,38 @@ async def _get_or_create_engine(
 
 
 @router.websocket("/ws/{project_id}")
-async def websocket_chat(websocket: WebSocket, project_id: str):
+async def websocket_chat(websocket: WebSocket, project_id: str, token: str = ""):
     await websocket.accept()
+
+    # Authenticate via ?token= query param
+    from app.api.deps import get_user_from_token
+    from app.models.project import Project as ProjectModel
 
     try:
         async with async_session() as db:
+            user = await get_user_from_token(token, db) if token else None
+            if not user:
+                await websocket.send_json({
+                    "type": "error",
+                    "content": "未登录或登录已过期，请重新登录",
+                })
+                await websocket.close(code=4001)
+                return
+
+            # Verify project ownership before doing anything
+            owner_check = await db.execute(
+                select(ProjectModel).where(ProjectModel.id == project_id)
+            )
+            proj_row = owner_check.scalar_one_or_none()
+            if not proj_row:
+                await websocket.send_json({"type": "error", "content": "Project not found"})
+                await websocket.close(code=4004)
+                return
+            if proj_row.owner_id != user.id:
+                await websocket.send_json({"type": "error", "content": "无权访问此项目"})
+                await websocket.close(code=4003)
+                return
+
             try:
                 engine, project = await _get_or_create_engine(project_id, db)
             except ValueError:
