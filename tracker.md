@@ -21,6 +21,7 @@
 | 2026-07-05 | 首页想法种子 | 创建项目时的初步想法作为第一条用户消息入库 + AI 引用回应 |
 | 2026-07-07 | 用户体系立项 | 先做完整单用户体系（L1+L2）：User 表 + JWT + 密码哈希 + 项目归属。协作体系（L3）后续按需补 |
 | 2026-07-07 | 用户体系完成 ✅ | JWT无状态鉴权 + bcrypt 哈希（直接用 bcrypt 库避开 passlib 1.7.4 bug）；所有 API + WS 强制鉴权且校验 owner；10/10 后端测试 + 浏览器端到端验证通过 |
+| 2026-07-07 | 生产加固 ✅ | fail-fast 配置校验 + 登录/注册限流 + 生产 Docker（nginx+后端不暴露宿主机）+ 生产关 docs/DEBUG/SQL echo + 安全响应头 + DEPLOYMENT.md |
 
 ## MVP 完成 ✓
 
@@ -53,6 +54,26 @@
 
 ### 🤝 协作体系 L3（后续按需）
 - 项目共享、成员权限、团队
+
+### 🚀 生产加固（✅ 完成 2026-07-07）
+
+按上线标准执行：
+- [x] `validate_production()` fail-fast：默认密钥/短密钥/DEBUG=true/缺 API key/localhost CORS 直接拒绝启动
+- [x] 登录限流 5次/5分/IP+邮箱，注册 3次/小时/IP（429 + Retry-After）
+- [x] 生产关 /docs /redoc /openapi.json
+- [x] 生产关 SQL echo / DEBUG
+- [x] 生产 Docker：后端非 root + 2 workers + 不暴露宿主机；前端 multi-stage → nginx
+- [x] nginx：SPA fallback + /api + /ws 代理 + gzip + 安全响应头
+- [x] `.env.prod` gitignore，`.env.example` 全量重写 + 生成密钥说明
+- [x] `DEPLOYMENT.md` 部署指南
+
+**验证：** 配置校验拒绝不安全/接受安全；限流 5 ok → 429；前端生产构建成功；auth 链路依旧绿。
+
+**重要提醒（上线前）：**
+1. `cp backend/.env.example backend/.env.prod` 并填真实值（JWT_SECRET 用 `secrets.token_urlsafe(48)` 生成）
+2. 必上 HTTPS（nginx 前挂 Caddy/Traefik/云 LB 自动证书）
+3. 限流是单实例内存态，多实例需换 Redis
+4. 并发写入多建议 SQLite → PostgreSQL；表结构变更建议引入 Alembic
 
 ### 旧待办
 
