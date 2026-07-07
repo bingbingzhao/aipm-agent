@@ -20,6 +20,7 @@
 | 2026-07-05 | 需求卡片落盘 | 每条 WS 消息后写 requirement_slots 表，刷新不丢 |
 | 2026-07-05 | 首页想法种子 | 创建项目时的初步想法作为第一条用户消息入库 + AI 引用回应 |
 | 2026-07-07 | 用户体系立项 | 先做完整单用户体系（L1+L2）：User 表 + JWT + 密码哈希 + 项目归属。协作体系（L3）后续按需补 |
+| 2026-07-07 | 用户体系完成 ✅ | JWT无状态鉴权 + bcrypt 哈希（直接用 bcrypt 库避开 passlib 1.7.4 bug）；所有 API + WS 强制鉴权且校验 owner；10/10 后端测试 + 浏览器端到端验证通过 |
 
 ## MVP 完成 ✓
 
@@ -27,26 +28,31 @@
 
 ## 下一阶段
 
-### 🔐 用户体系（进行中 2026-07-07）
+### 🔐 用户体系（✅ 完成 2026-07-07）
 
 **范围：**完整单用户体系，协作留后续。
 
 后端：
-- [ ] `User` 模型（id/email/username/hashed_password/created_at）
-- [ ] 密码哈希（passlib bcrypt）+ JWT（python-jose）
-- [ ] auth 端点：注册/登录/获取当前用户
-- [ ] `Project.owner_id` 外键 + 所有 project API 按 owner 过滤
-- [ ] WebSocket token 鉴权 + 项目归属校验
-- [ ] 现有数据迁移（存量 project 归属默认用户或清空）
+- [x] `User` 模型（id/email/username/hashed_password/is_active/created_at）
+- [x] 密码哈希（bcrypt 直接调用）+ JWT（python-jose）
+- [x] auth 端点：`/api/auth/register|login|me`
+- [x] `Project.owner_id` 外键 + 所有 project/conversation/pipeline API 按 owner 过滤
+- [x] WebSocket `?token=` 鉴权 + 项目归属校验
+- [x] 现有数据迁移（存量 9 个无归属 project 隐藏）
 
 前端：
-- [ ] 登录/注册页
-- [ ] token 存储（localStorage）+ 请求拦截器注入 Authorization
-- [ ] 路由守卫（未登录跳登录）
-- [ ] 顶部显示用户 + 登出
-- [ ] WS 连接带 token
+- [x] 登录/注册页（AuthView.vue，tab 切换）
+- [x] token 存 localStorage + client 拦截器注入 Authorization + 401 自动跳登录
+- [x] 路由守卫（beforeEach，未登录跳 /login?redirect=）
+- [x] 顶部用户菜单（头像/名/邮箱/登出）
+- [x] WS 连接带 token
 
-**技术选型：** JWT（无状态，适合前后端分离 + Railway 部署），bcrypt 密码哈希，token 存 localStorage。
+**技术选型：** JWT（无状态），bcrypt 密码哈希，token 存 localStorage。
+**验证：** 10/10 后端测试（注册/登录/隔离/WS 鉴权）+ 浏览器端到端（守卫跳转/登录/项目隔离）全部通过。
+**待办（L2 可选完善）：** 邮箱验证、密码找回、第三方登录。
+
+### 🤝 协作体系 L3（后续按需）
+- 项目共享、成员权限、团队
 
 ### 旧待办
 
