@@ -13,6 +13,8 @@ from app.core.db import init_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail fast on unsafe production config
+    settings.validate_production()
     await init_db()
     yield
 
@@ -22,6 +24,10 @@ app = FastAPI(
     description="AI Product Manager Agent — From idea to PRD",
     version="0.1.0",
     lifespan=lifespan,
+    # Disable interactive API docs in production
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
 # CORS

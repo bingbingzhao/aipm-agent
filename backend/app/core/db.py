@@ -10,7 +10,7 @@ db_url = settings.database_url
 if db_url.startswith("sqlite:///"):
     db_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
 
-engine = create_async_engine(db_url, echo=settings.debug)
+engine = create_async_engine(db_url, echo=settings.debug and not settings.is_production)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

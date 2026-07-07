@@ -1,0 +1,47 @@
+# AIPM Agent — Production Docker Compose
+#
+# Usage:
+#   1. Copy backend/.env.example → backend/.env.prod and fill in real values
+#      (JWT_SECRET, OPENAI_API_KEY, DATABASE_URL, CORS_ORIGINS, APP_ENV=production, DEBUG=false)
+#   2. docker compose -f docker-compose.prod.yml up -d --build
+#
+# Frontend is served by nginx on :80 and proxies /api + /ws to the backend.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      - APP_ENV=production
+      - DEBUG=false
+    volumes:
+      - backend_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    # Not exposed to host — only reachable via the frontend nginx proxy
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # Same-origin: nginx proxies /api and /ws, so relative base works
+        VITE_API_URL: ""
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend_data:

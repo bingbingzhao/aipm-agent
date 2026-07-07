@@ -34,5 +34,29 @@ class Settings(BaseSettings):
             return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
         return self.cors_origins
 
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() in ("production", "prod")
+
+    def validate_production(self) -> None:
+        """Fail fast on unsafe production configuration."""
+        if not self.is_production:
+            return
+        errors = []
+        if self.jwt_secret == "CHANGE-ME-in-production-use-a-long-random-string":
+            errors.append("JWT_SECRET must be set to a strong random value in production")
+        if len(self.jwt_secret) < 32:
+            errors.append("JWT_SECRET must be at least 32 characters")
+        if self.debug:
+            errors.append("DEBUG must be false in production")
+        if self.openai_api_key in ("", "sk-xxx"):
+            errors.append("OPENAI_API_KEY must be set in production")
+        if any("localhost" in o or "127.0.0.1" in o for o in self.get_cors_origins()):
+            errors.append("CORS_ORIGINS must not include localhost in production")
+        if errors:
+            raise RuntimeError(
+                "Unsafe production configuration:\n  - " + "\n  - ".join(errors)
+            )
+
 
 settings = Settings()
